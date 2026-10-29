@@ -1,0 +1,24 @@
+{
+  "product-comparison": {
+    "blades": {
+      "hello-world": {
+        "title": "Hello world blade"
+      }
+    }
+  },
+  "permissions": {
+    "product-comparison:access": "Open Product Comparison menu",
+    "product-comparison:create": "Create Product Comparison related data",
+    "product-comparison:read": "View Product Comparison related data",
+    "product-comparison:update": "Update Product Comparison related data",
+    "product-comparison:delete": "Delete Product Comparison related data"
+  },
+  "settings": {
+    "ProductComparison": {
+      "Enabled": {
+        "title": "Product Comparison Enabled",
+        "description": "Product Comparison Enabled setting"
+      }
+    }
+  }
+}
