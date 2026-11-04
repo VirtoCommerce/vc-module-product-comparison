@@ -172,6 +172,8 @@ public abstract class StorefrontEnvironment : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
+        GC.SuppressFinalize(this);
+
         if (_backend == null)
         {
             return;

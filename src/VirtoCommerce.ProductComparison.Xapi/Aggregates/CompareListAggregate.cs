@@ -238,7 +238,7 @@ public class CompareListAggregate
         return items.OrderBy(x => x.Position).ThenBy(x => x.CreatedDate);
     }
 
-    private static void Renumber(IList<CompareListItem> items)
+    private static void Renumber(List<CompareListItem> items)
     {
         for (var i = 0; i < items.Count; i++)
         {
