@@ -153,6 +153,16 @@ public abstract class StorefrontEnvironment : IAsyncLifetime
         // none, as the storefront keeps it, so a sign-in in the same context replaces it.
         await context.AddInitScriptAsync($"if (!localStorage.getItem('user-id')) localStorage.setItem('user-id', {JsonSerializer.Serialize(guestId)});");
 
+        // A guest whose list was seeded is one whose browser saved it: the plugin remembers the list's id, and loads a
+        // guest's list only then. Set only while there is none, as the plugin forgets it after a sign-in's merge.
+        var guestList = (await GetListsAsync(guestId)).FirstOrDefault();
+        if (guestList != null)
+        {
+            await context.AddInitScriptAsync(
+                $"if (!localStorage.getItem({JsonSerializer.Serialize(CompareControls.GuestListIdKey)})) " +
+                $"localStorage.setItem({JsonSerializer.Serialize(CompareControls.GuestListIdKey)}, {JsonSerializer.Serialize(guestList.Id)});");
+        }
+
         var session = new StorefrontSession(context, await context.NewPageAsync());
         await session.GotoAsync(path);
         Log($"loaded {session.Page.Url}");

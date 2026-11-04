@@ -106,6 +106,11 @@ async function loadStore(serverList?: CompareListFragment): Promise<StoreModuleT
   vi.resetModules();
   facade.query.mockResolvedValue({ data: { compareList: serverList } });
 
+  // A guest with a list is one whose browser saved it, and so remembers its id.
+  if (serverList && !facade.isAuthenticated) {
+    localStorage.setItem(GUEST_LIST_ID_STORAGE_KEY, serverList.id);
+  }
+
   const store = await import("./useCompareList");
   await store.loadCompareList();
 
@@ -132,10 +137,32 @@ describe("loading the list", () => {
   });
 
   // Decision D10: the guest's list is merged into the account's after sign-in, so the plugin remembers its id.
-  it("remembers a guest's list for the merge after sign-in", async () => {
-    await loadStore(list([item()], "guest-list"));
+  it("remembers a guest's list, once the first save creates it, for the merge after sign-in", async () => {
+    const store = await loadStore();
+    answerMutations([[SaveProductsToCompareListDocument, list([item({ productId: "product-9" })], "guest-list")]]);
+
+    await store.useCompareList().add(printer());
 
     expect(localStorage.getItem(GUEST_LIST_ID_STORAGE_KEY)).toBe("guest-list");
+  });
+
+  // Most guests never compare: a guest's list is reachable only from the browser that remembers its id, so without
+  // one a page load asks the server nothing.
+  it("asks nothing for a guest who never compared", async () => {
+    const store = await loadStore();
+
+    expect(facade.query).not.toHaveBeenCalled();
+    expect(store.useCompareCount().count.value).toBe(0);
+  });
+
+  // The cleanup deletes a guest list unchanged for two days: the browser stops asking for it.
+  it("forgets a guest list the server no longer has", async () => {
+    localStorage.setItem(GUEST_LIST_ID_STORAGE_KEY, "cleaned-up");
+
+    await loadStore();
+
+    expect(facade.query).toHaveBeenCalledOnce();
+    expect(localStorage.getItem(GUEST_LIST_ID_STORAGE_KEY)).toBeNull();
   });
 
   it("remembers nothing for a signed-in buyer", async () => {
@@ -449,6 +476,7 @@ describe("the configuration source", () => {
     vi.resetModules();
     let answer: (value: unknown) => void = () => {};
     facade.query.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    localStorage.setItem(GUEST_LIST_ID_STORAGE_KEY, "list-1");
     const store = await import("./useCompareList");
 
     void store.loadCompareList();

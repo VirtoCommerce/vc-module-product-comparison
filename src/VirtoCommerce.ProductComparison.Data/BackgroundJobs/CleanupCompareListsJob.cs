@@ -12,10 +12,13 @@ using VirtoCommerce.Platform.Core.Settings;
 using VirtoCommerce.ProductComparison.Core;
 using VirtoCommerce.ProductComparison.Core.Models;
 using VirtoCommerce.ProductComparison.Core.Services;
+using VirtoCommerce.ProductComparison.Data.Models;
+using VirtoCommerce.ProductComparison.Data.Repositories;
 
 namespace VirtoCommerce.ProductComparison.Data.BackgroundJobs;
 
 public class CleanupCompareListsJob(
+    Func<IProductComparisonRepository> repositoryFactory,
     ICompareListService compareListService,
     ICompareListSearchService compareListSearchService,
     IUserSearchService userSearchService,
@@ -62,34 +65,38 @@ public class CleanupCompareListsJob(
 
     protected virtual async Task<int> DeleteOrphanedListsAsync()
     {
-        var criteria = AbstractTypeFactory<CompareListSearchCriteria>.TryCreateInstance();
-        criteria.IsAnonymous = false;
-        criteria.Take = BatchSize;
-
         var deletedCount = 0;
-        IList<CompareList> lists;
+        string lastId = null;
+        IList<CompareListOwner> lists;
 
         do
         {
-            lists = (await compareListSearchService.SearchNoCloneAsync(criteria)).Results;
+            using (var repository = repositoryFactory())
+            {
+                lists = await repository.GetRegisteredListOwnersAsync(lastId, BatchSize);
+            }
 
-            var orphanedListIds = lists.Count > 0 ? await GetOrphanedListIdsAsync(lists) : [];
+            if (lists.Count == 0)
+            {
+                break;
+            }
+
+            lastId = lists[^1].Id;
+
+            var orphanedListIds = await GetOrphanedListIdsAsync(lists);
 
             if (orphanedListIds.Count > 0)
             {
                 await compareListService.DeleteAsync(orphanedListIds);
                 deletedCount += orphanedListIds.Count;
             }
-
-            // Deleted lists no longer take up the page, so skip only the ones that stay.
-            criteria.Skip += lists.Count - orphanedListIds.Count;
         }
         while (lists.Count == BatchSize);
 
         return deletedCount;
     }
 
-    protected virtual async Task<IList<string>> GetOrphanedListIdsAsync(IList<CompareList> lists)
+    protected virtual async Task<IList<string>> GetOrphanedListIdsAsync(IList<CompareListOwner> lists)
     {
         var userIds = lists.Select(x => x.UserId).Distinct().ToList();
 
@@ -122,7 +129,7 @@ public class CleanupCompareListsJob(
         };
     }
 
-    private static bool IsOrphaned(CompareList list, Dictionary<string, string> memberIdsByUserId, Dictionary<string, IList<string>> organizationIdsByMemberId)
+    private static bool IsOrphaned(CompareListOwner list, Dictionary<string, string> memberIdsByUserId, Dictionary<string, IList<string>> organizationIdsByMemberId)
     {
         if (!memberIdsByUserId.TryGetValue(list.UserId, out var memberId))
         {

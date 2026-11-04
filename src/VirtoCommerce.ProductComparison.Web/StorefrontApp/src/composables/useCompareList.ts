@@ -295,15 +295,21 @@ async function mergeGuestList(secondListId: string): Promise<boolean> {
 /** Loads the list; after a sign-in, merges the guest's list into the account's first. */
 export function loadCompareList(): Promise<void> {
   loaded = enqueue(async () => {
+    const isAuthenticated = useUser().isAuthenticated.value;
     const secondListId = guestListId.value;
 
     // Forgotten before the call, so a merge the server refuses is not retried on every page load.
-    if (useUser().isAuthenticated.value && secondListId) {
+    if (isAuthenticated && secondListId) {
       guestListId.value = null;
 
       if (await mergeGuestList(secondListId)) {
         return;
       }
+    }
+
+    // A guest's list is reachable only from the browser that remembers its id: without one there is nothing to load.
+    if (!isAuthenticated && !secondListId) {
+      return;
     }
 
     const { data } = await apolloClient.query({
@@ -313,6 +319,11 @@ export function loadCompareList(): Promise<void> {
       context: SUPPRESS_ERROR_NOTIFICATIONS_CONTEXT,
     });
     setList(data.compareList);
+
+    // The cleanup removed it (unchanged for days): stop asking for it.
+    if (!isAuthenticated && !data.compareList) {
+      guestListId.value = null;
+    }
   }).catch((error) => Logger.error("[product-comparison] load", error));
 
   return loaded;

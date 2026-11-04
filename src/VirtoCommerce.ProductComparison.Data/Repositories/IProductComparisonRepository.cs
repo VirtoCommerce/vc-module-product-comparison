@@ -17,4 +17,6 @@ public interface IProductComparisonRepository : IRepository
     Task<IList<CompareListEntity>> GetCompareListsByIdsAsync(IList<string> ids);
 
     Task<int> DeleteItemsByProductIdsAsync(IList<string> productIds);
+
+    Task<IList<CompareListOwner>> GetRegisteredListOwnersAsync(string afterId, int take);
 }

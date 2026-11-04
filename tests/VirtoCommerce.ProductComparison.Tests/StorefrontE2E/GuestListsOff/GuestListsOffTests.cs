@@ -40,9 +40,9 @@ public sealed class GuestListsOffTests(GuestListsOffEnvironment env)
             await Expect(HeaderCompareLink(page, 0)).ToBeVisibleAsync();
         });
 
-        // The plugin refused before calling the server (the guest's list query answers "none", not an error), and the
-        // server holds no list for the guest.
-        session.Operations.Should().Contain("CompareList").And.NotContain("SaveProductsToCompareList");
+        // The plugin refused before calling the server, and a guest who never compared asks it nothing, not even for
+        // the list; the server holds no list for the guest.
+        session.Operations.Should().NotContain("CompareList").And.NotContain("SaveProductsToCompareList");
         session.GraphQlErrors.Should().BeEmpty();
         (await env.GetListsAsync(guestId)).Should().BeEmpty();
     }

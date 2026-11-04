@@ -44,4 +44,21 @@ public class ProductComparisonRepository : DbContextRepositoryBase<ProductCompar
     {
         return CompareListItems.Where(x => productIds.Contains(x.ProductId)).ExecuteDeleteAsync();
     }
+
+    // Ordered by id and continued after the last one, so a batch's deletions don't shift the next batch.
+    public virtual async Task<IList<CompareListOwner>> GetRegisteredListOwnersAsync(string afterId, int take)
+    {
+        var query = CompareLists.Where(x => !x.IsAnonymous);
+
+        if (afterId != null)
+        {
+            query = query.Where(x => string.Compare(x.Id, afterId) > 0);
+        }
+
+        return await query
+            .OrderBy(x => x.Id)
+            .Take(take)
+            .Select(x => new CompareListOwner { Id = x.Id, UserId = x.UserId, OrganizationId = x.OrganizationId })
+            .ToListAsync();
+    }
 }
