@@ -12,13 +12,6 @@ public static class ModuleConstants
 
     public const int CustomTextLength = 255;
 
-    public static class SectionTypes
-    {
-        public const string Product = "Product";
-        public const string Text = "Text";
-        public const string File = "File";
-    }
-
     public static class Settings
     {
         public static class General

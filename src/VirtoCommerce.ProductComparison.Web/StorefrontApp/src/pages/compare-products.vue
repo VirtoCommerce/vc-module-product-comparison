@@ -145,8 +145,6 @@
         <CompareTable
           :columns="columns"
           :rows="tableRows"
-          :differ-count="differRowsCount"
-          :total-rows="tableRows.length"
           @clear-category="openClearCategoryModal"
           @remove-product="removeColumn"
           @select-item="selectItemEvent"
@@ -188,7 +186,6 @@ const {
   selectedCategoryCount,
   columns,
   tableRows,
-  differRowsCount,
   totalCount,
   refetch,
   selectCategory,

@@ -39,7 +39,6 @@ vi.mock("../composables/useComparePage", async () => {
       selectedCategoryCount: ref(2),
       columns: ref([{ item: { id: "item-1" } }]),
       tableRows: ref([]),
-      differRowsCount: ref(0),
       refetch: page.refetch,
       selectCategory: vi.fn(),
       selectItemEvent: vi.fn(),

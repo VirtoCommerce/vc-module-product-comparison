@@ -1,12 +1,10 @@
-import { getProductRoute, globals } from "@vc-frontend/core";
-import { PropertyValueTypes } from "./api/graphql/types";
+import { getProductRoute } from "@vc-frontend/core";
 import { CATEGORY_BREADCRUMB_TYPE_NAME, COMPARE_CATEGORY_DEPTH, COMPARE_ITEM_ID_PARAM } from "./constants";
 import type { CompareListItemType, ICompareColumn } from "./types";
 import type { CompareProductFragment } from "./api/graphql/types";
 import type { ConfigurationSectionInput } from "@vc-frontend/core";
 import type { RouteLocationRaw } from "vue-router";
 
-type PropertyType = CompareProductFragment["properties"][number];
 type BreadcrumbType = { itemId: string; typeName?: string };
 type SectionKeyPartsType = {
   sectionId: string;
@@ -83,45 +81,14 @@ export function getConfigurationLink(item: ICompareColumn["item"], product: Comp
   return { ...routeAsObject, query: { ...routeAsObject.query, [COMPARE_ITEM_ID_PARAM]: item.id } };
 }
 
-// The host's own property formatting (getPropertiesGroupedByName in vc-frontend), so a row reads as the product
-// page shows the property: hidden ones left out, a multivalue property joined.
-function hasPropertyValue(property: PropertyType): boolean {
-  return !(
-    property.value === undefined ||
-    (property.value === null && property.propertyValueType !== PropertyValueTypes.Boolean)
-  );
+/** A list's category groups by id; the uncategorized group's id is null, its key "". */
+export function getCategoryKey(categoryId?: string | null): string {
+  return categoryId ?? "";
 }
 
-function getPropertyValue(property: PropertyType): string | undefined {
-  const { t, d, n } = globals.i18n.global;
-
-  switch (property.propertyValueType) {
-    case PropertyValueTypes.Boolean:
-      return property.value ? t("common.labels.true_property") : t("common.labels.false_property");
-    case PropertyValueTypes.DateTime:
-      return d(new Date(property.value as string));
-    case PropertyValueTypes.Integer:
-    case PropertyValueTypes.Number:
-      return n(property.value as number);
-    default:
-      return property.value as string;
-  }
-}
-
-export function getPropertiesGroupedByName(properties: PropertyType[]): Record<string, PropertyType> {
-  return properties.reduce<Record<string, PropertyType>>((propertiesByName, property) => {
-    if (property.hidden || !hasPropertyValue(property)) {
-      return propertiesByName;
-    }
-
-    const value = getPropertyValue(property);
-
-    if (propertiesByName[property.name]) {
-      propertiesByName[property.name].value += `, ${value}`;
-    } else {
-      propertiesByName[property.name] = { ...property, value, label: property.label || property.name };
-    }
-
-    return propertiesByName;
-  }, {});
+export function getCategoryItems<T extends { categoryId?: string | null }>(
+  items: T[],
+  categoryId?: string | null,
+): T[] {
+  return items.filter((item) => getCategoryKey(item.categoryId) === getCategoryKey(categoryId));
 }

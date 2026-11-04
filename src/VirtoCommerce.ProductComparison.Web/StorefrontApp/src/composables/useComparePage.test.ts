@@ -156,7 +156,6 @@ describe("an item whose product is gone", () => {
     const state = runPage();
 
     expect(state.tableRows.value.filter((row) => row.differs).map((row) => row.key)).toEqual(["field:sku"]);
-    expect(state.differRowsCount.value).toBe(1);
   });
 
   it("is left out of the viewed list analytics", () => {

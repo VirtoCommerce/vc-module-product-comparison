@@ -25,7 +25,6 @@ export const NOTIFICATIONS_GROUP = "compare-products";
 export const NOTIFICATION_PRODUCT_NAME_MAX_LENGTH = 60;
 
 export const CompareListErrorCode = {
-  Disabled: "COMPARE_LIST_DISABLED",
   AnonymousListDisabled: "ANONYMOUS_COMPARE_LIST_DISABLED",
   LimitReached: "COMPARE_LIST_LIMIT_REACHED",
   Full: "COMPARE_LIST_FULL",
@@ -52,9 +51,8 @@ export const CUSTOMER_REVIEWS_MODULE_ID = "VirtoCommerce.CustomerReviews";
 export const CUSTOMER_REVIEWS_ENABLED_KEY = "CustomerReviews.CustomerReviewsEnabled";
 export const XAPI_MODULE_ID = "VirtoCommerce.Xapi";
 export const CONTINUE_SHOPPING_LINK_KEY = "Frontend.ContinueShoppingLink";
-export const XRECOMMEND_MODULE_ID = "VirtoCommerce.XRecommend";
-export const XRECOMMEND_ENABLED_KEY = "XRecommend.RecommendationsEnabled";
 export const MAX_DISPLAY_IN_STOCK_QUANTITY = 9999;
 export const DIGITAL_PRODUCT_TYPE = "Digital";
 export const CATALOG_PRODUCT_ERROR_OBJECT_TYPE = "CatalogProduct";
 export const CATEGORY_BREADCRUMB_TYPE_NAME = "Category";
+export const FILE_SECTION_TYPE = "File";

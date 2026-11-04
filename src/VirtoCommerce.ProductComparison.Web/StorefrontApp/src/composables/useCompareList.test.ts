@@ -174,7 +174,7 @@ describe("loading the list", () => {
     const store = await loadStore(list([item()], "account-list"));
 
     expect(facade.query).toHaveBeenCalledOnce();
-    expect(store.useCompareList().list.value?.id).toBe("account-list");
+    expect(store.useCompareCount().count.value).toBe(1);
     expect(localStorage.getItem(GUEST_LIST_ID_STORAGE_KEY)).toBeNull();
   });
 });
@@ -317,7 +317,7 @@ describe("removing and clearing", () => {
 
     expect(mutationsOf(RemoveCompareListItemsDocument)[0].variables.command.itemIds).toEqual(["item-1"]);
     expect(facade.notifications.warning).toHaveBeenCalledWith(
-      expect.objectContaining({ text: expect.stringContaining("LaserJet Pro") }),
+      expect.objectContaining({ html: expect.stringContaining("LaserJet Pro") }),
     );
     expect(store.useCompareCount().count.value).toBe(0);
   });

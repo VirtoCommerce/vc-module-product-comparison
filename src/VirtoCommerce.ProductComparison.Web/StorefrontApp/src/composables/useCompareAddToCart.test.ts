@@ -1,15 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { useCompareAddToCart } from "./useCompareAddToCart";
 import type { CompareProductFragment } from "../api/graphql/types";
 
 const host = vi.hoisted(() => ({
   addToCart: vi.fn(),
-  mutate: vi.fn(),
-  analytics: vi.fn(),
+  trackAddItemToCart: vi.fn(),
+  pushHistoricalEvent: vi.fn(),
   notifications: { success: vi.fn(), error: vi.fn() },
-  isAuthenticated: true,
-  recommendationsEnabled: true,
   quantityValid: true,
   translate: vi.fn(),
 }));
@@ -18,18 +16,13 @@ vi.mock("vue-i18n", () => ({
   useI18n: () => ({ t: (key: string, values: object = {}) => `${key} ${JSON.stringify(values)}` }),
 }));
 
-vi.mock("vue-router", () => ({ useRoute: () => ({ name: "CompareProducts", path: "/compare" }) }));
-
 vi.mock("@vc-frontend/core", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  apolloClient: { mutate: host.mutate },
-  globals: { storeId: "B2B-store" },
-  useShortCart: () => ({ cart: ref({ id: "cart-1" }), addToCart: host.addToCart }),
-  useUser: () => ({ isAuthenticated: computed(() => host.isAuthenticated) }),
-  useAnalytics: () => ({ analytics: host.analytics }),
+  useShortCart: () => ({ addToCart: host.addToCart }),
+  useAnalyticsUtils: () => ({ trackAddItemToCart: host.trackAddItemToCart }),
+  useHistoricalEvents: () => ({ pushHistoricalEvent: host.pushHistoricalEvent }),
   useNotifications: () => host.notifications,
   useErrorsTranslator: () => ({ translate: host.translate }),
-  useModuleSettings: () => ({ isEnabled: () => host.recommendationsEnabled }),
   // The host's quantity rules, reduced to their verdict: the product's min/max/pack size/stock are its business.
   useQuantityValidationSchema: () => ({
     quantitySchema: computed(() => ({ isValidSync: () => host.quantityValid })),
@@ -55,11 +48,9 @@ function product(overrides: Partial<CompareProductFragment> = {}): CompareProduc
 
 beforeEach(() => {
   vi.clearAllMocks();
-  host.isAuthenticated = true;
-  host.recommendationsEnabled = true;
   host.quantityValid = true;
   host.addToCart.mockResolvedValue({ validationErrors: [] });
-  host.mutate.mockResolvedValue({ data: { pushHistoricalEvent: true } });
+  host.pushHistoricalEvent.mockResolvedValue(undefined);
 });
 
 describe("compare add to cart", () => {
@@ -90,40 +81,22 @@ describe("compare add to cart", () => {
       expect.objectContaining({ text: expect.stringContaining("Not enough in stock") }),
     );
     expect(host.notifications.success).not.toHaveBeenCalled();
-    expect(host.analytics).not.toHaveBeenCalled();
+    expect(host.trackAddItemToCart).not.toHaveBeenCalled();
+    expect(host.pushHistoricalEvent).not.toHaveBeenCalled();
   });
 
-  // The host's own add-to-cart buttons report the add to analytics and, for a signed-in buyer, to recommendations
-  // (with the cart as the session): the compare page does the same.
-  it("reports the add to analytics and to recommendations", async () => {
+  // Through the host's own bookkeeping, as its add-to-cart buttons report an add: the analytics event (marked as
+  // the compare page's) and the recommendations' event. Whether recommendations get it (a signed-in buyer, the module
+  // on) is the host's call.
+  it("reports the add as the host's add-to-cart buttons do", async () => {
     const { onAddToCart } = useCompareAddToCart();
 
     await onAddToCart("item-1", product());
 
-    expect(host.analytics).toHaveBeenCalledWith("addItemToCart", expect.objectContaining({ id: "product-1" }), 1, {
-      source_route: "CompareProducts",
+    expect(host.trackAddItemToCart).toHaveBeenCalledWith(expect.objectContaining({ id: "product-1" }), 1, {
       source_block: "compare",
     });
-    expect(host.mutate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        variables: {
-          command: { eventType: "addToCart", productId: "product-1", sessionId: "cart-1", storeId: "B2B-store" },
-        },
-      }),
-    );
-  });
-
-  it.each([
-    ["a guest", { isAuthenticated: false, recommendationsEnabled: true }],
-    ["recommendations off", { isAuthenticated: true, recommendationsEnabled: false }],
-  ])("sends no recommendation event for %s", async (_case, state) => {
-    Object.assign(host, state);
-    const { onAddToCart } = useCompareAddToCart();
-
-    await onAddToCart("item-1", product());
-
-    expect(host.mutate).not.toHaveBeenCalled();
-    expect(host.analytics).toHaveBeenCalledOnce();
+    expect(host.pushHistoricalEvent).toHaveBeenCalledWith({ eventType: "addToCart", productId: "product-1" });
   });
 
   it("is off for a product that can't be bought, and for a quantity the product's rules refuse", () => {

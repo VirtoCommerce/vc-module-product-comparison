@@ -13,11 +13,6 @@ public class GetCompareListQueryHandler(ICompareListAggregateRepository reposito
         var aggregate = await repository.GetAsync(request);
 
         // Nothing to show: no list yet, compare is off for the store, or guest lists are off.
-        if (!aggregate.IsSaved || !aggregate.IsEnabled || (aggregate.List.IsAnonymous && !aggregate.IsAnonymousListEnabled))
-        {
-            return null;
-        }
-
-        return aggregate;
+        return aggregate.IsSaved && aggregate.IsAvailable ? aggregate : null;
     }
 }

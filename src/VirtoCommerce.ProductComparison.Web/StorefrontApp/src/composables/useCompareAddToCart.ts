@@ -1,25 +1,14 @@
 import {
-  apolloClient,
-  globals,
-  Logger,
-  useAnalytics,
+  useAnalyticsUtils,
   useErrorsTranslator,
-  useModuleSettings,
+  useHistoricalEvents,
   useNotifications,
   useQuantityValidationSchema,
   useShortCart,
-  useUser,
 } from "@vc-frontend/core";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRoute } from "vue-router";
-import { PushHistoricalEventDocument } from "../api/graphql/storefront/types";
-import {
-  CATALOG_PRODUCT_ERROR_OBJECT_TYPE,
-  NOTIFICATION_PRODUCT_NAME_MAX_LENGTH,
-  XRECOMMEND_ENABLED_KEY,
-  XRECOMMEND_MODULE_ID,
-} from "../constants";
+import { CATALOG_PRODUCT_ERROR_OBJECT_TYPE, NOTIFICATION_PRODUCT_NAME_MAX_LENGTH } from "../constants";
 import { truncate } from "../utils";
 import type { CompareProductFragment } from "../api/graphql/types";
 import type { ProductActionPropsType } from "@vc-frontend/core";
@@ -39,13 +28,11 @@ function getQuantity(product: CompareProductFragment): number {
  */
 export function useCompareAddToCart() {
   const { t } = useI18n();
-  const route = useRoute();
   const { translate } = useErrorsTranslator<ValidationErrorType>("validation_error");
-  const { cart, addToCart } = useShortCart();
-  const { isAuthenticated } = useUser();
-  const { analytics } = useAnalytics();
+  const { addToCart } = useShortCart();
+  const { trackAddItemToCart } = useAnalyticsUtils();
+  const { pushHistoricalEvent } = useHistoricalEvents();
   const notifications = useNotifications();
-  const recommendationsEnabled = useModuleSettings(XRECOMMEND_MODULE_ID).isEnabled(XRECOMMEND_ENABLED_KEY);
 
   const addingItemIds = ref(new Set<string>());
 
@@ -75,22 +62,6 @@ export function useCompareAddToCart() {
     return addingItemIds.value.has(itemId);
   }
 
-  // The event recommendations learn from, as the host's own add-to-cart buttons send it.
-  function pushAddToCartEvent(productId: string) {
-    if (!recommendationsEnabled || !isAuthenticated.value) {
-      return;
-    }
-
-    apolloClient
-      .mutate({
-        mutation: PushHistoricalEventDocument,
-        variables: {
-          command: { eventType: "addToCart", productId, sessionId: cart.value?.id, storeId: globals.storeId },
-        },
-      })
-      .catch((error: unknown) => Logger.error("[product-comparison] historical event", error));
-  }
-
   async function onAddToCart(itemId: string, product: CompareProductFragment) {
     if (addingItemIds.value.has(itemId)) {
       return;
@@ -115,11 +86,12 @@ export function useCompareAddToCart() {
         return;
       }
 
-      analytics("addItemToCart", product as unknown as ProductActionPropsType["product"], quantity, {
-        source_route: typeof route.name === "string" ? route.name : route.path,
+      // As the host's own add-to-cart buttons report it. The analytics mapper reads only what the compare query
+      // selects: code, name, vendor, price, properties, breadcrumbs.
+      trackAddItemToCart(product as unknown as ProductActionPropsType["product"], quantity, {
         source_block: "compare",
       });
-      pushAddToCartEvent(product.id);
+      void pushHistoricalEvent({ eventType: "addToCart", productId: product.id });
 
       notifications.success({
         html: t("product_comparison.notifications.added_to_cart_html", {

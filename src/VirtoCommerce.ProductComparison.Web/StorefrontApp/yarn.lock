@@ -2605,7 +2605,7 @@ __metadata:
 
 "@vc-frontend/core@file:./facade/vc-frontend-core-0.2.8.tgz::locator=product-comparison%40workspace%3A.":
   version: 0.2.8
-  resolution: "@vc-frontend/core@file:./facade/vc-frontend-core-0.2.8.tgz#./facade/vc-frontend-core-0.2.8.tgz::hash=110375&locator=product-comparison%40workspace%3A."
+  resolution: "@vc-frontend/core@file:./facade/vc-frontend-core-0.2.8.tgz#./facade/vc-frontend-core-0.2.8.tgz::hash=511c11&locator=product-comparison%40workspace%3A."
   peerDependencies:
     "@apollo/client": ^3.14.0
     "@floating-ui/vue": ^2.0.1
@@ -2633,7 +2633,7 @@ __metadata:
       optional: true
     tw-elements:
       optional: true
-  checksum: 10c0/b519af262caa1bd185b8c433a4b2f9c4a0946b39eecac3cf7161c3074064217e6cf0aaf9f14c774a0cca606a8064a0a73f087fd3e49b558e43884a4e3e2bc375
+  checksum: 10c0/1618cb361504869f8bb9eef67f3fd8f0ab82f03318e89d580c163ef1785651684d18226b5f4be1b43297d7dda1bf834037985424974e3e0b9fa95ff45a7aa175
   languageName: node
   linkType: hard
 

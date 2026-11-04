@@ -74,10 +74,10 @@ public class Module : IModule, IHasConfiguration
 
         serviceCollection.AddTransient<ICompareListAggregateRepository, CompareListAggregateRepository>();
         serviceCollection.AddSingleton<IAuthorizationHandler, CanAccessCompareListAuthorizationHandler>();
-        serviceCollection.AddTransient<AbstractValidator<GetCompareListQuery>, GetCompareListQueryValidator>();
+        serviceCollection.AddTransient<AbstractValidator<GetCompareListQuery>, CompareListRequestValidator<GetCompareListQuery>>();
         serviceCollection.AddTransient<AbstractValidator<SaveProductsToCompareListCommand>, SaveProductsToCompareListCommandValidator>();
         serviceCollection.AddTransient<AbstractValidator<RemoveCompareListItemsCommand>, RemoveCompareListItemsCommandValidator>();
-        serviceCollection.AddTransient<AbstractValidator<ClearCompareListCommand>, CompareListCommandValidator<ClearCompareListCommand>>();
+        serviceCollection.AddTransient<AbstractValidator<ClearCompareListCommand>, CompareListRequestValidator<ClearCompareListCommand>>();
         serviceCollection.AddTransient<AbstractValidator<ClearCompareListCategoryCommand>, ClearCompareListCategoryCommandValidator>();
         serviceCollection.AddTransient<AbstractValidator<MergeCompareListCommand>, MergeCompareListCommandValidator>();
         serviceCollection.AddTransient<AbstractValidator<MoveCompareListItemCommand>, MoveCompareListItemCommandValidator>();

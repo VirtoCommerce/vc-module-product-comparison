@@ -4,7 +4,7 @@ using VirtoCommerce.ProductComparison.Xapi.Commands;
 
 namespace VirtoCommerce.ProductComparison.Xapi.Validators;
 
-public class RemoveCompareListItemsCommandValidator : CompareListCommandValidator<RemoveCompareListItemsCommand>
+public class RemoveCompareListItemsCommandValidator : CompareListRequestValidator<RemoveCompareListItemsCommand>
 {
     public RemoveCompareListItemsCommandValidator()
     {

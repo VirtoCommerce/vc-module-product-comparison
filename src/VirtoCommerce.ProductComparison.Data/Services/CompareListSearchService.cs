@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Primitives;
+using VirtoCommerce.Platform.Caching;
 using VirtoCommerce.Platform.Core.Caching;
 using VirtoCommerce.Platform.Core.Common;
 using VirtoCommerce.Platform.Core.GenericCrud;
@@ -65,6 +67,12 @@ public class CompareListSearchService(
         }
 
         return query;
+    }
+
+    // Keyed by user, so the service can expire one buyer's lookups; a search without a user is keyed by "".
+    protected override IChangeToken CreateCacheToken(CompareListSearchCriteria criteria)
+    {
+        return GenericSearchCachingRegion<CompareList>.CreateChangeTokenForKey(criteria.UserId ?? string.Empty);
     }
 
     protected override IList<SortInfo> BuildSortExpression(CompareListSearchCriteria criteria)

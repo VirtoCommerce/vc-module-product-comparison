@@ -4,7 +4,7 @@ using VirtoCommerce.ProductComparison.Xapi.Commands;
 
 namespace VirtoCommerce.ProductComparison.Xapi.Validators;
 
-public class SaveProductsToCompareListCommandValidator : CompareListCommandValidator<SaveProductsToCompareListCommand>
+public class SaveProductsToCompareListCommandValidator : CompareListRequestValidator<SaveProductsToCompareListCommand>
 {
     public SaveProductsToCompareListCommandValidator()
     {

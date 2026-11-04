@@ -1,6 +1,7 @@
 using FluentValidation;
 using VirtoCommerce.ProductComparison.Core;
 using VirtoCommerce.ProductComparison.Xapi.Models;
+using CatalogModuleConstants = VirtoCommerce.CatalogModule.Core.ModuleConstants;
 
 namespace VirtoCommerce.ProductComparison.Xapi.Validators;
 
@@ -15,7 +16,7 @@ public class CompareListProductValidator : AbstractValidator<CompareListProduct>
         {
             section.RuleFor(x => x.SectionId).NotEmpty().MaximumLength(ModuleConstants.IdLength);
             section.RuleFor(x => x.Type)
-                .Must(type => type is ModuleConstants.SectionTypes.Product or ModuleConstants.SectionTypes.Text)
+                .Must(type => type is CatalogModuleConstants.ConfigurationSectionTypeProduct or CatalogModuleConstants.ConfigurationSectionTypeText)
                 .WithMessage("Only Product and Text sections can be compared");
             section.RuleFor(x => x.Option.ProductId)
                 .NotEmpty()

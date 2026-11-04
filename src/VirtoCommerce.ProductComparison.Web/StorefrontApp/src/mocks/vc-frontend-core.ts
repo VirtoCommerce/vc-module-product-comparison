@@ -39,11 +39,10 @@ export const InStock = defineComponent({
   setup: (props) => () => h("span", { class: "in-stock" }, String(props.quantity)),
 });
 
-export const useUser = () => ({ isAuthenticated: computed(() => false), checkPermissions: () => true });
+export const useUser = () => ({ isAuthenticated: computed(() => false) });
 export const useModuleSettings = () => ({
   isEnabled: () => true,
   getSettingValue: () => undefined,
-  getModuleSettings: () => ({}),
 });
 export const useModal = () => ({ openModal: () => () => {}, closeModal: () => {} });
 export const useNotifications = () => ({
@@ -53,10 +52,28 @@ export const useNotifications = () => ({
   info: () => {},
   clear: () => {},
 });
-export const useNavigations = () => ({ mergeMenuSchema: () => {}, registerAccountSection: () => {} });
 export const useExtensionRegistry = () => ({ register: () => {}, registerContribution: () => {} });
 export const useThemeContext = () => ({ themeContext: ref({ settings: {} }) });
 export const useAnalytics = () => ({ analytics: () => {} });
+export const useAnalyticsUtils = () => ({ trackAddItemToCart: () => {} });
+export const useHistoricalEvents = () => ({ pushHistoricalEvent: () => Promise.resolve() });
+
+type PropertyType = { name: string; label?: string; value?: unknown; hidden?: boolean };
+
+// The host's grouping, without its value formatting: hidden properties out, one entry per name, multivalues joined.
+export function getPropertiesGroupedByName(properties: PropertyType[]): Record<string, PropertyType> {
+  return properties.reduce<Record<string, PropertyType>>((grouped, property) => {
+    if (property.hidden || property.value === undefined) {
+      return grouped;
+    }
+
+    const existing = grouped[property.name];
+    grouped[property.name] = existing
+      ? { ...existing, value: `${String(existing.value)}, ${String(property.value)}` }
+      : { ...property, label: property.label || property.name };
+    return grouped;
+  }, {});
+}
 export const useErrorsTranslator = () => ({ translate: () => undefined });
 export const useQuantityValidationSchema = () => ({
   quantitySchema: computed(() => ({ isValidSync: () => true })),
@@ -65,5 +82,4 @@ export const useShortCart = () => ({ cart: ref(), addToCart: () => Promise.resol
 export const useBreadcrumbs = (items: unknown[]) => computed(() => items);
 export const usePageHead = () => {};
 export const registerLocaleLoader = () => {};
-export const registerCacheTypePolicies = () => {};
 export const registerProductConfigurationSource = () => {};

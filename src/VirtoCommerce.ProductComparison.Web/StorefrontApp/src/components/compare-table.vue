@@ -354,16 +354,12 @@ interface IEmits {
 interface IProps {
   columns: ICompareColumn[];
   rows?: ICompareTableRow[];
-  differCount?: number;
-  totalRows?: number;
 }
 
 const emit = defineEmits<IEmits>();
 
 const props = withDefaults(defineProps<IProps>(), {
   rows: () => [],
-  differCount: 0,
-  totalRows: 0,
 });
 
 // Shown under the "Differences" filter whether they differ or not.
@@ -421,6 +417,9 @@ async function onRemove(column: ICompareColumn) {
 function getVariationsLabel(product: CompareProductFragment): string {
   return t("pages.catalog.variations_button", getVariationsCount(product));
 }
+
+const differCount = computed(() => props.rows.filter((row) => row.differs).length);
+const totalRows = computed(() => props.rows.length);
 
 const isTabSwitchDisabled = computed(() => props.columns.filter((column) => column.product).length <= 1);
 

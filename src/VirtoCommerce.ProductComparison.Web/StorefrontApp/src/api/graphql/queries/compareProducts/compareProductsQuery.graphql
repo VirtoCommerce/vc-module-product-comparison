@@ -12,7 +12,6 @@ query CompareProducts($storeId: String!, $userId: String!, $cultureName: String,
       items {
         id
         productId
-        categoryId
         configurationSections {
           sectionId
           type

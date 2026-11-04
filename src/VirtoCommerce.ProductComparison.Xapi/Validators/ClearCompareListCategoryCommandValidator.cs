@@ -4,7 +4,7 @@ using VirtoCommerce.ProductComparison.Xapi.Commands;
 
 namespace VirtoCommerce.ProductComparison.Xapi.Validators;
 
-public class ClearCompareListCategoryCommandValidator : CompareListCommandValidator<ClearCompareListCategoryCommand>
+public class ClearCompareListCategoryCommandValidator : CompareListRequestValidator<ClearCompareListCategoryCommand>
 {
     public ClearCompareListCategoryCommandValidator()
     {

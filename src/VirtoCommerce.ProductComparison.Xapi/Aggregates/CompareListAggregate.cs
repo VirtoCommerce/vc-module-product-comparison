@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using VirtoCommerce.Platform.Core.Common;
 using VirtoCommerce.ProductComparison.Core;
 using VirtoCommerce.ProductComparison.Core.Models;
@@ -38,23 +36,20 @@ public class CompareListAggregate
         {
             var category = AbstractTypeFactory<CompareListCategory>.TryCreateInstance();
             category.CategoryId = group.First().CategoryId;
-            category.Items = group.OrderBy(x => x.Position).ThenBy(x => x.CreatedDate).Take(MaxItems).ToList();
+            category.Items = ByPosition(group).Take(MaxItems).ToList();
             return category;
         })
         .ToList();
 
     public virtual IList<CompareListItem> VisibleItems => Categories.SelectMany(x => x.Items).ToList();
 
+    public virtual bool IsAvailable => IsEnabled && (!List.IsAnonymous || IsAnonymousListEnabled);
+
     public virtual void EnsureAvailable()
     {
-        if (!IsEnabled)
+        if (!IsAvailable)
         {
-            throw CompareListErrors.Disabled();
-        }
-
-        if (List.IsAnonymous && !IsAnonymousListEnabled)
-        {
-            throw CompareListErrors.AnonymousDisabled();
+            throw IsEnabled ? CompareListErrors.AnonymousDisabled() : CompareListErrors.Disabled();
         }
     }
 
@@ -64,19 +59,16 @@ public class CompareListAggregate
 
         foreach (var product in products)
         {
-            var configurationKey = GetConfigurationKey(product.ConfigurationSections);
+            var item = CreateItem(
+                product.ProductId,
+                string.IsNullOrEmpty(product.CategoryId) ? null : product.CategoryId,
+                product.ConfigurationSections?.Select(ToSection).ToList() ?? []);
+            item.ConfigurationKey = item.GetConfigurationKey();
 
-            if (FindItem(product.ProductId, configurationKey) != null)
+            if (FindItem(item.ProductId, item.ConfigurationKey) != null)
             {
                 continue;
             }
-
-            var item = AbstractTypeFactory<CompareListItem>.TryCreateInstance();
-            item.ProductId = product.ProductId;
-            item.CategoryId = string.IsNullOrEmpty(product.CategoryId) ? null : product.CategoryId;
-            item.ConfigurationKey = configurationKey;
-            item.Position = GetNextPosition(item.CategoryId);
-            item.Sections = product.ConfigurationSections?.Select(ToSection).ToList() ?? [];
 
             List.Items.Add(item);
             categoryKeys.Add(GetCategoryKey(item.CategoryId));
@@ -119,11 +111,7 @@ public class CompareListAggregate
             return;
         }
 
-        var items = GetCategoryItems(GetCategoryKey(item.CategoryId))
-            .Where(x => !ReferenceEquals(x, item))
-            .OrderBy(x => x.Position)
-            .ThenBy(x => x.CreatedDate)
-            .ToList();
+        var items = ByPosition(GetCategoryItems(GetCategoryKey(item.CategoryId)).Where(x => !ReferenceEquals(x, item))).ToList();
 
         items.Insert(Math.Clamp(position, 0, items.Count), item);
         Renumber(items);
@@ -174,17 +162,12 @@ public class CompareListAggregate
 
         List.Items = List.Items.Where(x => !removedItems.Contains(x)).ToList();
 
-        Renumber(GetCategoryItems(categoryKey).OrderBy(x => x.Position).ThenBy(x => x.CreatedDate).ToList());
+        Renumber(ByPosition(GetCategoryItems(categoryKey)).ToList());
     }
 
     protected virtual CompareListItem CopyItem(CompareListItem sourceItem)
     {
-        var item = AbstractTypeFactory<CompareListItem>.TryCreateInstance();
-        item.ProductId = sourceItem.ProductId;
-        item.CategoryId = sourceItem.CategoryId;
-        item.ConfigurationKey = sourceItem.ConfigurationKey;
-        item.Position = GetNextPosition(sourceItem.CategoryId);
-        item.Sections = sourceItem.Sections
+        var sections = sourceItem.Sections
             .Select(x =>
             {
                 var section = x.CloneTyped();
@@ -192,6 +175,20 @@ public class CompareListAggregate
                 return section;
             })
             .ToList();
+
+        var item = CreateItem(sourceItem.ProductId, sourceItem.CategoryId, sections);
+        item.ConfigurationKey = sourceItem.ConfigurationKey;
+
+        return item;
+    }
+
+    protected virtual CompareListItem CreateItem(string productId, string categoryId, IList<CompareListItemSection> sections)
+    {
+        var item = AbstractTypeFactory<CompareListItem>.TryCreateInstance();
+        item.ProductId = productId;
+        item.CategoryId = categoryId;
+        item.Position = GetNextPosition(categoryId);
+        item.Sections = sections;
 
         return item;
     }
@@ -206,21 +203,6 @@ public class CompareListAggregate
         result.CustomText = section.CustomText;
 
         return result;
-    }
-
-    // Two items are the same when the product and every section's choice match, as the storefront compared them.
-    protected virtual string GetConfigurationKey(IList<ProductConfigurationSection> sections)
-    {
-        if (sections.IsNullOrEmpty())
-        {
-            return string.Empty;
-        }
-
-        var normalized = string.Join('\n', sections
-            .OrderBy(x => x.SectionId, StringComparer.Ordinal)
-            .Select(x => $"{x.SectionId}|{x.Type}|{x.Option?.ProductId}|{x.Option?.Quantity}|{x.CustomText}"));
-
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)));
     }
 
     protected virtual CompareListItem FindItem(string productId, string configurationKey)
@@ -243,6 +225,11 @@ public class CompareListAggregate
     protected static string GetCategoryKey(string categoryId)
     {
         return categoryId ?? string.Empty;
+    }
+
+    private static IOrderedEnumerable<CompareListItem> ByPosition(IEnumerable<CompareListItem> items)
+    {
+        return items.OrderBy(x => x.Position).ThenBy(x => x.CreatedDate);
     }
 
     private static void Renumber(IList<CompareListItem> items)

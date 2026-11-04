@@ -101,7 +101,7 @@ const PassthroughStub = (name: string, tag = "div") =>
 
 function column(id: string, overrides: Partial<CompareProductFragment> = {}): ICompareColumn {
   return {
-    item: { id: `item-${id}`, productId: id, categoryId: "cat-a", configurationSections: [] },
+    item: { id: `item-${id}`, productId: id, configurationSections: [] },
     product: {
       id,
       slug: id,
@@ -114,7 +114,7 @@ function column(id: string, overrides: Partial<CompareProductFragment> = {}): IC
 }
 
 function unavailable(id: string): ICompareColumn {
-  return { item: { id: `item-${id}`, productId: id, categoryId: "cat-a", configurationSections: [] } };
+  return { item: { id: `item-${id}`, productId: id, configurationSections: [] } };
 }
 
 async function setCompact(compact: boolean) {
@@ -136,7 +136,7 @@ function mountTable(props: { columns?: ICompareColumn[] } = {}) {
   // every .focus() in this file a silent no-op.
   return mount(CompareTable, {
     attachTo: document.body,
-    props: { columns: props.columns ?? [], rows: [], differCount: 0, totalRows: 0 },
+    props: { columns: props.columns ?? [], rows: [] },
     global: {
       mocks: { $t: (key: string) => key },
       stubs: {

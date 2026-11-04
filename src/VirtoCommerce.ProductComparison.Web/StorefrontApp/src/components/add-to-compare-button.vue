@@ -13,6 +13,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useCompareList } from "../composables/useCompareList";
+import { FILE_SECTION_TYPE } from "../constants";
 import type { ProductActionPropsType } from "@vc-frontend/core";
 
 interface IProps {
@@ -25,7 +26,12 @@ const props = defineProps<IProps>();
 const { t } = useI18n();
 const { findItem, add, remove } = useCompareList();
 
-const item = computed(() => findItem(props.product.id, props.configurationSections));
+// File sections can't be compared: the list keeps only product and text choices.
+const configurationSections = computed(() =>
+  props.configurationSections?.filter((section) => section.type !== FILE_SECTION_TYPE),
+);
+
+const item = computed(() => findItem(props.product.id, configurationSections.value));
 const isInList = computed(() => !!item.value);
 const busy = ref(false);
 
@@ -45,7 +51,7 @@ async function toggle() {
     if (item.value) {
       await remove(item.value, props.product.name);
     } else {
-      await add(props.product, props.configurationSections);
+      await add(props.product, configurationSections.value);
     }
   } finally {
     busy.value = false;

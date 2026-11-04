@@ -1,6 +1,7 @@
 import { useQuery } from "@vue/apollo-composable";
 import {
   apolloClient,
+  getPropertiesGroupedByName,
   globals,
   Logger,
   SUPPRESS_ERROR_NOTIFICATIONS_CONTEXT,
@@ -27,7 +28,7 @@ import {
   RATING_ROW_KEY,
   SKU_ROW_KEY,
 } from "../constants";
-import { getDisplayPrice, getPropertiesGroupedByName, toConfigurationSectionInputs } from "../utils";
+import { getCategoryKey, getDisplayPrice, toConfigurationSectionInputs } from "../utils";
 import type { CompareProductFragment } from "../api/graphql/types";
 import type { StorefrontMoneyFragment } from "../api/graphql/storefront/types";
 import type {
@@ -48,23 +49,30 @@ type AnalyticsProductType = ProductActionPropsType["product"];
 
 const COMPARE_LIST_ID = "compare_products";
 
-export function getCategoryKey(categoryId?: string | null): string {
-  return categoryId ?? "";
+type HostPropertiesType = Parameters<typeof getPropertiesGroupedByName>[0];
+
+function byLowercaseName<T extends { name: string }>(items: T[]): Map<string, T> {
+  const result = new Map<string, T>();
+  items.forEach((item) => {
+    const name = item.name.toLowerCase();
+    if (!result.has(name)) {
+      result.set(name, item);
+    }
+  });
+  return result;
 }
 
-function getPropertyRowValue(product: CompareProductFragment, propertyName: string): string {
-  const property = Object.values(getPropertiesGroupedByName(product.properties)).find(
-    (prop) => prop.name.toLowerCase() === propertyName,
-  );
-  return property?.value != null ? String(property.value) : EMPTY_VALUE_PLACEHOLDER;
-}
-
-// The grouped properties hold display text ("Yes"/"No"), so boolean rows read the raw value.
-function getBooleanProperty(product: CompareProductFragment, propertyName: string) {
-  return product.properties.find(
-    (prop) =>
-      !prop.hidden && prop.name.toLowerCase() === propertyName && prop.propertyValueType === PropertyValueTypes.Boolean,
-  );
+// A product's properties as rows read them, built once per product: as the product page shows them, and the raw
+// booleans, since the shown ones hold display text ("Yes"/"No").
+function indexProperties(product: CompareProductFragment) {
+  return {
+    shown: byLowercaseName(
+      Object.values(getPropertiesGroupedByName(product.properties as unknown as HostPropertiesType)),
+    ),
+    booleans: byLowercaseName(
+      product.properties.filter((prop) => !prop.hidden && prop.propertyValueType === PropertyValueTypes.Boolean),
+    ),
+  };
 }
 
 function getAvailabilitySignature(product: CompareProductFragment): string {
@@ -215,10 +223,12 @@ export function useComparePage() {
     key: string,
     label: string,
     kind: CompareRowKindType,
-    getValue: (product: CompareProductFragment) => string,
+    getValue: (product: CompareProductFragment, item: ComparePageItemType) => string,
     description?: string,
   ): ICompareTableRow {
-    const values = columns.value.map(({ product }) => (product ? getValue(product) : EMPTY_VALUE_PLACEHOLDER));
+    const values = columns.value.map(({ item, product }) =>
+      product ? getValue(product, item) : EMPTY_VALUE_PLACEHOLDER,
+    );
     return { key, label, kind, values, differs: differs(values), description };
   }
 
@@ -267,11 +277,12 @@ export function useComparePage() {
   });
 
   const propertyRows = computed<ICompareTableRow[]>(() => {
+    const properties = new Map(availableProducts.value.map((product) => [product, indexProperties(product)]));
+
     // Lowercased name -> the label of its first occurrence.
     const labelsByName = new Map<string, string>();
-    availableProducts.value.forEach((product) =>
-      Object.values(getPropertiesGroupedByName(product.properties)).forEach((prop) => {
-        const name = prop.name.toLowerCase();
+    properties.forEach(({ shown }) =>
+      shown.forEach((prop, name) => {
         if (!labelsByName.has(name)) {
           labelsByName.set(name, prop.label);
         }
@@ -280,14 +291,15 @@ export function useComparePage() {
 
     return [...labelsByName]
       .map(([name, label]) => {
-        const isBoolean = availableProducts.value.some((product) => getBooleanProperty(product, name));
-        const row = makeRow(`${PROPERTY_ROW_KEY_PREFIX}${name}`, label, isBoolean ? "boolean" : "text", (product) =>
-          getPropertyRowValue(product, name),
-        );
+        const isBoolean = [...properties.values()].some(({ booleans }) => booleans.has(name));
+        const row = makeRow(`${PROPERTY_ROW_KEY_PREFIX}${name}`, label, isBoolean ? "boolean" : "text", (product) => {
+          const value = properties.get(product)?.shown.get(name)?.value;
+          return value != null ? String(value) : EMPTY_VALUE_PLACEHOLDER;
+        });
 
         if (isBoolean) {
           row.boolValues = columns.value.map(({ product }) => {
-            const value = product && getBooleanProperty(product, name)?.value;
+            const value = product && properties.get(product)?.booleans.get(name)?.value;
             return value === undefined ? undefined : Boolean(value);
           });
         }
@@ -306,25 +318,16 @@ export function useComparePage() {
     );
 
     return [...labels]
-      .map((label) => {
-        const values = columns.value.map(({ item, product }) => {
+      .map((label) =>
+        makeRow(`${CONFIG_PROPERTY_ROW_KEY_PREFIX}${label}`, label, "text", (_product, item) => {
           const section = item.configurationSections.find((x) => x.configurationSection?.name === label);
-          return (product && section && getSectionValue(section)) || EMPTY_VALUE_PLACEHOLDER;
-        });
-
-        return {
-          key: `${CONFIG_PROPERTY_ROW_KEY_PREFIX}${label}`,
-          label,
-          kind: "text" as const,
-          values,
-          differs: differs(values),
-        };
-      })
+          return (section && getSectionValue(section)) || EMPTY_VALUE_PLACEHOLDER;
+        }),
+      )
       .filter((row) => row.values.some((value) => value !== EMPTY_VALUE_PLACEHOLDER));
   });
 
   const tableRows = computed(() => [...fieldRows.value, ...propertyRows.value, ...configurationRows.value]);
-  const differRowsCount = computed(() => tableRows.value.filter((row) => row.differs).length);
 
   const listProperties = computed(() => ({
     item_list_id: COMPARE_LIST_ID,
@@ -367,7 +370,6 @@ export function useComparePage() {
     selectedCategoryCount: computed(() => selectedTab.value?.count ?? 0),
     columns,
     tableRows,
-    differRowsCount,
     refetch,
     selectCategory,
     selectItemEvent,

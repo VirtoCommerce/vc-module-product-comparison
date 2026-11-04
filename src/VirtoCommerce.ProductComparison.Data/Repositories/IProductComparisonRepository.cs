@@ -14,7 +14,7 @@ public interface IProductComparisonRepository : IRepository
 
     IQueryable<CompareListItemSectionEntity> CompareListItemSections { get; }
 
-    Task<IList<CompareListEntity>> GetCompareListsByIdsAsync(IList<string> ids, string responseGroup = null);
+    Task<IList<CompareListEntity>> GetCompareListsByIdsAsync(IList<string> ids);
 
     Task<int> DeleteItemsByProductIdsAsync(IList<string> productIds);
 }

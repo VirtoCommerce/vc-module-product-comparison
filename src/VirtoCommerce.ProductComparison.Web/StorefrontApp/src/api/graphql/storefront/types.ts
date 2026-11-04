@@ -2065,20 +2065,11 @@ export type CreateConfiguredLineItemMutationVariables = Exact<{
 
 export type CreateConfiguredLineItemMutation = { createConfiguredLineItem?: { listPrice?: { amount: number, formattedAmount: string, formattedAmountWithoutCurrency: string }, salePrice?: { amount: number, formattedAmount: string, formattedAmountWithoutCurrency: string } } };
 
-export type PushHistoricalEventMutationVariables = Exact<{
-  command: InputPushHistoricalEventType;
-}>;
-
-
-export type PushHistoricalEventMutation = { pushHistoricalEvent?: boolean };
-
 export const StorefrontMoneyFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"storefrontMoney"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"MoneyType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"amount"}},{"kind":"Field","name":{"kind":"Name","value":"formattedAmount"}},{"kind":"Field","name":{"kind":"Name","value":"formattedAmountWithoutCurrency"}}]}}]} as unknown as DocumentNode<StorefrontMoneyFragment, unknown>;
 export const CreateConfiguredLineItemDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateConfiguredLineItem"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"command"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"InputCreateConfiguredLineItemCommand"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createConfiguredLineItem"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"command"},"value":{"kind":"Variable","name":{"kind":"Name","value":"command"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"listPrice"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"storefrontMoney"}}]}},{"kind":"Field","name":{"kind":"Name","value":"salePrice"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"storefrontMoney"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"storefrontMoney"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"MoneyType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"amount"}},{"kind":"Field","name":{"kind":"Name","value":"formattedAmount"}},{"kind":"Field","name":{"kind":"Name","value":"formattedAmountWithoutCurrency"}}]}}]} as unknown as DocumentNode<CreateConfiguredLineItemMutation, CreateConfiguredLineItemMutationVariables>;
-export const PushHistoricalEventDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PushHistoricalEvent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"command"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"InputPushHistoricalEventType"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"pushHistoricalEvent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"command"},"value":{"kind":"Variable","name":{"kind":"Name","value":"command"}}}]}]}}]} as unknown as DocumentNode<PushHistoricalEventMutation, PushHistoricalEventMutationVariables>;
 export const OperationNames = {
   Mutation: {
-    CreateConfiguredLineItem: 'CreateConfiguredLineItem',
-    PushHistoricalEvent: 'PushHistoricalEvent'
+    CreateConfiguredLineItem: 'CreateConfiguredLineItem'
   },
   Fragment: {
     storefrontMoney: 'storefrontMoney'

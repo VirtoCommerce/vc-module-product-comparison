@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using VirtoCommerce.ProductComparison.Core;
 using VirtoCommerce.ProductComparison.Core.Models;
+using CatalogModuleConstants = VirtoCommerce.CatalogModule.Core.ModuleConstants;
 
 namespace VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure;
 
@@ -36,7 +37,7 @@ internal static class CompareListTestData
         return new CompareListItemSection
         {
             SectionId = sectionId,
-            Type = ModuleConstants.SectionTypes.Product,
+            Type = CatalogModuleConstants.ConfigurationSectionTypeProduct,
             ProductId = optionProductId,
             Quantity = quantity,
         };
@@ -47,7 +48,7 @@ internal static class CompareListTestData
         return new CompareListItemSection
         {
             SectionId = sectionId,
-            Type = ModuleConstants.SectionTypes.Text,
+            Type = CatalogModuleConstants.ConfigurationSectionTypeText,
             CustomText = customText,
         };
     }

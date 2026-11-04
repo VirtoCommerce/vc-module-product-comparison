@@ -22,7 +22,7 @@ public class ProductComparisonRepository : DbContextRepositoryBase<ProductCompar
 
     public virtual IQueryable<CompareListItemSectionEntity> CompareListItemSections => DbContext.Set<CompareListItemSectionEntity>();
 
-    public virtual async Task<IList<CompareListEntity>> GetCompareListsByIdsAsync(IList<string> ids, string responseGroup = null)
+    public virtual async Task<IList<CompareListEntity>> GetCompareListsByIdsAsync(IList<string> ids)
     {
         if (ids.IsNullOrEmpty())
         {

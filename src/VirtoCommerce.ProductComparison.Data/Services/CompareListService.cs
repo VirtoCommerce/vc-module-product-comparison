@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using VirtoCommerce.Platform.Caching;
 using VirtoCommerce.Platform.Core.Caching;
@@ -28,7 +29,18 @@ public class CompareListService(
 
     protected override Task<IList<CompareListEntity>> LoadEntities(IRepository repository, IList<string> ids, string responseGroup)
     {
-        return ((IProductComparisonRepository)repository).GetCompareListsByIdsAsync(ids, responseGroup);
+        return ((IProductComparisonRepository)repository).GetCompareListsByIdsAsync(ids);
+    }
+
+    // One buyer's save expires only that buyer's lookups, as the cart does: not every shopper's cached list.
+    protected override void ClearSearchCache(IList<CompareList> models)
+    {
+        GenericSearchCachingRegion<CompareList>.ExpireTokenForKey(string.Empty);
+
+        foreach (var userId in models.Select(x => x.UserId).Distinct())
+        {
+            GenericSearchCachingRegion<CompareList>.ExpireTokenForKey(userId);
+        }
     }
 
     public virtual async Task RemoveProductsAsync(IList<string> productIds)

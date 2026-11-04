@@ -30,6 +30,7 @@ import {
   NOTIFICATIONS_GROUP,
 } from "../constants";
 import {
+  getCategoryItems,
   getItemConfigurationKey,
   getProductCategoryId,
   getSelectionConfigurationKey,
@@ -67,13 +68,8 @@ function getUserVariables() {
   return { storeId: globals.storeId, userId: globals.userId };
 }
 
-function getCategoryKey(categoryId?: string | null): string {
-  return categoryId ?? "";
-}
-
 function countInCategory(categoryId?: string): number {
-  return (list.value?.items ?? []).filter((item) => getCategoryKey(item.categoryId) === getCategoryKey(categoryId))
-    .length;
+  return getCategoryItems(list.value?.items ?? [], categoryId).length;
 }
 
 function getMaxItems(): number {
@@ -93,14 +89,17 @@ function getErrorCode(error: unknown): string | undefined {
   return graphQLErrors.find((graphQLError) => graphQLError.extensions?.code)?.extensions?.code as string | undefined;
 }
 
-function warn(text: string, button?: { text: string; to: string | object }): void {
+type NotificationType = { text?: string; html?: string; button?: { text: string; to: string | object } };
+
+// One toast at a time for compare; its button also closes it.
+function notify(kind: "success" | "warning", { button, ...content }: NotificationType): void {
   const notifications = useNotifications();
 
-  notifications.warning({
+  notifications[kind]({
     duration: NOTIFICATION_DURATION,
     group: NOTIFICATIONS_GROUP,
     singleInGroup: true,
-    text,
+    ...content,
     button: button && {
       ...button,
       clickHandler() {
@@ -108,6 +107,10 @@ function warn(text: string, button?: { text: string; to: string | object }): voi
       },
     },
   });
+}
+
+function warn(text: string, button?: NotificationType["button"]): void {
+  notify("warning", { text, button });
 }
 
 function warnSignInRequired(): void {
@@ -188,11 +191,7 @@ async function add(product: ProductType, configurationSections?: ConfigurationSe
     return;
   }
 
-  const notifications = useNotifications();
-  notifications.success({
-    duration: NOTIFICATION_DURATION,
-    group: NOTIFICATIONS_GROUP,
-    singleInGroup: true,
+  notify("success", {
     html: t("product_comparison.notifications.added_html", {
       productName: truncate(product.name, NOTIFICATION_PRODUCT_NAME_MAX_LENGTH),
       itemsLeft: getMaxItems() - countInCategory(categoryId),
@@ -200,9 +199,6 @@ async function add(product: ProductType, configurationSections?: ConfigurationSe
     button: {
       text: t("product_comparison.notifications.compare_button"),
       to: { path: COMPARE_ROUTE_PATH, query: categoryId ? { [CATEGORY_PARAM]: categoryId } : {} },
-      clickHandler() {
-        notifications.clear(NOTIFICATIONS_GROUP);
-      },
     },
   });
 }
@@ -218,11 +214,11 @@ async function remove(item: CompareListItemType, productName?: string): Promise<
   });
 
   if (removed && productName) {
-    warn(
-      t("product_comparison.notifications.removed_html", {
+    notify("warning", {
+      html: t("product_comparison.notifications.removed_html", {
         productName: truncate(productName, NOTIFICATION_PRODUCT_NAME_MAX_LENGTH),
       }),
-    );
+    });
   }
 }
 
@@ -246,7 +242,7 @@ async function clear(): Promise<void> {
 /** `categoryId` as the list returns it: none for the uncategorized group. */
 async function clearCategory(categoryId?: string | null): Promise<void> {
   const items = list.value?.items ?? [];
-  const categoryItems = items.filter((item) => getCategoryKey(item.categoryId) === getCategoryKey(categoryId));
+  const categoryItems = getCategoryItems(items, categoryId);
 
   const cleared = await change(async () => {
     const { data } = await apolloClient.mutate({
@@ -337,7 +333,6 @@ export function useCompareCount() {
 
 export function useCompareList() {
   return {
-    list: computed(() => list.value),
     maxItems: computed(getMaxItems),
     canRestore: computed(() => lastRemovedItems.value.length > 0),
     findItem,

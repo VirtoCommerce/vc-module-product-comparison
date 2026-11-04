@@ -5,6 +5,7 @@ using FluentAssertions;
 using GraphQL;
 using VirtoCommerce.ProductComparison.Core;
 using VirtoCommerce.ProductComparison.Core.Models;
+using CatalogModuleConstants = VirtoCommerce.CatalogModule.Core.ModuleConstants;
 using VirtoCommerce.ProductComparison.Xapi;
 using VirtoCommerce.ProductComparison.Xapi.Aggregates;
 using VirtoCommerce.ProductComparison.Xapi.Models;
@@ -330,7 +331,7 @@ public class CompareListAggregateTests
         return new ProductConfigurationSection
         {
             SectionId = sectionId,
-            Type = ModuleConstants.SectionTypes.Product,
+            Type = CatalogModuleConstants.ConfigurationSectionTypeProduct,
             Option = new ConfigurableProductOption { ProductId = optionProductId, Quantity = quantity },
         };
     }
@@ -340,7 +341,7 @@ public class CompareListAggregateTests
         return new ProductConfigurationSection
         {
             SectionId = sectionId,
-            Type = ModuleConstants.SectionTypes.Text,
+            Type = CatalogModuleConstants.ConfigurationSectionTypeText,
             CustomText = text,
         };
     }
