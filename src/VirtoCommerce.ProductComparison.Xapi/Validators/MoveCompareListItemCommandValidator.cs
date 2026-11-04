@@ -1,5 +1,5 @@
 using FluentValidation;
-using VirtoCommerce.ProductComparison.Core;
+using VirtoCommerce.Platform.Data.Infrastructure;
 using VirtoCommerce.ProductComparison.Xapi.Commands;
 
 namespace VirtoCommerce.ProductComparison.Xapi.Validators;
@@ -8,7 +8,7 @@ public class MoveCompareListItemCommandValidator : CompareListRequestValidator<M
 {
     public MoveCompareListItemCommandValidator()
     {
-        RuleFor(x => x.ItemId).NotEmpty().MaximumLength(ModuleConstants.IdLength);
+        RuleFor(x => x.ItemId).NotEmpty().MaximumLength(DbContextBase.IdLength);
         RuleFor(x => x.Position).GreaterThanOrEqualTo(0);
     }
 }

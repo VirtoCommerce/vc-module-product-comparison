@@ -129,7 +129,8 @@ public class CleanupCompareListsJob(
         };
     }
 
-    private static bool IsOrphaned(CompareListOwner list, Dictionary<string, string> memberIdsByUserId, Dictionary<string, IList<string>> organizationIdsByMemberId)
+    // Orphaned: the user is gone, or the list's organization is one the user can no longer pick.
+    protected virtual bool IsOrphaned(CompareListOwner list, IDictionary<string, string> memberIdsByUserId, IDictionary<string, IList<string>> organizationIdsByMemberId)
     {
         if (!memberIdsByUserId.TryGetValue(list.UserId, out var memberId))
         {

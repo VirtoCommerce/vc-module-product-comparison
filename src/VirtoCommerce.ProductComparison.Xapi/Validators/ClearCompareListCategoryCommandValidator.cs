@@ -1,5 +1,5 @@
 using FluentValidation;
-using VirtoCommerce.ProductComparison.Core;
+using VirtoCommerce.Platform.Data.Infrastructure;
 using VirtoCommerce.ProductComparison.Xapi.Commands;
 
 namespace VirtoCommerce.ProductComparison.Xapi.Validators;
@@ -8,6 +8,6 @@ public class ClearCompareListCategoryCommandValidator : CompareListRequestValida
 {
     public ClearCompareListCategoryCommandValidator()
     {
-        RuleFor(x => x.CategoryId).MaximumLength(ModuleConstants.IdLength);
+        RuleFor(x => x.CategoryId).MaximumLength(DbContextBase.IdLength);
     }
 }

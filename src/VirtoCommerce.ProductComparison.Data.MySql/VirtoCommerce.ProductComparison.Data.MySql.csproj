@@ -11,10 +11,10 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="VirtoCommerce.Platform.Data.MySql" Version="3.1078.0" />
     <!-- Transitive override: this project resolves MySqlConnector 2.5.0 transitively, which is vulnerable -->
     <!-- (GHSA-473q-m89c-ghf8, patched in 2.6.1). Remove once the packages that bring it reference a patched version. -->
     <PackageReference Include="MySqlConnector" Version="2.6.2" />
+    <PackageReference Include="VirtoCommerce.Platform.Data.MySql" Version="3.1078.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\VirtoCommerce.ProductComparison.Data\VirtoCommerce.ProductComparison.Data.csproj" />

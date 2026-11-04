@@ -24,7 +24,7 @@ const codegen: CodegenConfig = {
       plugins: CODEGEN_PLUGINS,
       config: CODEGEN_CONFIG,
     },
-    // Two storefront operations the compare page also runs: the configured price and the add-to-cart event.
+    // The storefront operation the compare page also runs: the configured price.
     "src/api/graphql/storefront/types.ts": {
       schema: `${env.APP_BACKEND_URL}/graphql`,
       documents: STOREFRONT_DOCUMENTS,

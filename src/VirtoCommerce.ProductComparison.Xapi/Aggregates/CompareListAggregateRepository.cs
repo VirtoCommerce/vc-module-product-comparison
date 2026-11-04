@@ -25,6 +25,9 @@ public class CompareListAggregateRepository(
         criteria.UserId = request.UserId;
         criteria.OrganizationId = request.OrganizationId;
         criteria.OrganizationIdIsEmpty = string.IsNullOrEmpty(request.OrganizationId);
+        // A guest reaches only guest lists: a buyer's id in another case passes the guest rule where ids compare
+        // case-sensitively, and the search cache, which ignores case, would answer with the buyer's list.
+        criteria.IsAnonymous = request.IsAnonymous;
         criteria.Take = 1;
 
         var list = (await compareListSearchService.SearchAsync(criteria)).Results.FirstOrDefault() ?? CreateList(request);

@@ -14,9 +14,11 @@ namespace VirtoCommerce.ProductComparison.Tests.ComponentTests;
 /// Who may use which compare list through the X-API (VCST-5918, PLAN §5): the guest-cart rule, run by the builders'
 /// gate (account state, then <c>CanAccessCompareList</c>) before any handler. A guest may use only an id no
 /// registered user has, a signed-in buyer only their own, an administrator any; the organization is the token's,
-/// never an argument.
+/// never an argument. The class runs alone (<see cref="CompareListCacheCollection"/>): two tests need a cached lookup
+/// to survive until the next call, and another test's save would expire it and let them pass without the rule.
 /// </summary>
 [Trait("Category", "Component")]
+[Collection(CompareListCacheCollection.Name)]
 public class CompareListAccessGraphQlTests
 {
     private const string GuestId = "4d7e2b10-guest-0002";
@@ -37,6 +39,42 @@ public class CompareListAccessGraphQlTests
         save.ErrorCode.Should().Be("Unauthorized");
         clear.ErrorCode.Should().Be("Unauthorized");
         query.Root.GetProperty("data").GetProperty("compareList").ValueKind.Should().Be(JsonValueKind.Null, "nothing of the list may leak with the error");
+        Items((await ctx.ExecuteAsBuyerAsync("buyer-1", Query("buyer-1"))).Data("compareList")).Should().Equal("printer-1@printers#0");
+    }
+
+    [Fact]
+    public async Task Guest_SpellingABuyersIdInAnotherCase_GetsOnlyAGuestList()
+    {
+        // Where ids compare case-sensitively (PostgreSQL, and this harness's user store), "BUYER-1" is an id no
+        // registered user has, so the guest rule lets it through. The platform's search cache ignores case, though:
+        // a guest lookup that could also match the buyer's list was answered from the buyer's cached lookup, and the
+        // guest read and changed the buyer's list. A guest's lookup now reaches only guest lists.
+        using var ctx = ProductComparisonTestContext.Create();
+        ctx.Users.Add("buyer-1");
+        await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-1@printers"));
+        // Caches the buyer's lookup: a buyer without an organization, as every guest is.
+        await ctx.ExecuteAsBuyerAsync("buyer-1", Query("buyer-1"));
+
+        var query = await ctx.ExecuteAsGuestAsync(Query("BUYER-1"));
+        var save = await ctx.ExecuteAsGuestAsync(SaveProducts("BUYER-1", "printer-2@printers"));
+
+        query.Data("compareList").ValueKind.Should().Be(JsonValueKind.Null, "the guest has no list of their own yet");
+        Items(save.Data("saveProductsToCompareList")).Should().Equal("printer-2@printers#0");
+        Items((await ctx.ExecuteAsBuyerAsync("buyer-1", Query("buyer-1"))).Data("compareList")).Should().Equal("printer-1@printers#0");
+    }
+
+    [Fact]
+    public async Task Buyer_AfterAGuestAskedForTheirIdInAnotherCase_StillGetsTheirList()
+    {
+        // The same cache entry in the other order: a guest asks for "BUYER-1" first and finds nothing, and the buyer's
+        // own lookup was answered with that cached nothing. The buyer's list was hidden, and their next add went into
+        // a second list that the oldest-first lookup never shows.
+        using var ctx = ProductComparisonTestContext.Create();
+        ctx.Users.Add("buyer-1");
+        await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-1@printers"));
+
+        await ctx.ExecuteAsGuestAsync(Query("BUYER-1"));
+
         Items((await ctx.ExecuteAsBuyerAsync("buyer-1", Query("buyer-1"))).Data("compareList")).Should().Equal("printer-1@printers#0");
     }
 

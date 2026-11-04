@@ -1,5 +1,5 @@
 using FluentValidation;
-using VirtoCommerce.ProductComparison.Core;
+using VirtoCommerce.Platform.Data.Infrastructure;
 using VirtoCommerce.ProductComparison.Xapi.Models;
 
 namespace VirtoCommerce.ProductComparison.Xapi.Validators;
@@ -9,7 +9,7 @@ public class CompareListRequestValidator<TRequest> : AbstractValidator<TRequest>
 {
     public CompareListRequestValidator()
     {
-        RuleFor(x => x.StoreId).NotEmpty().MaximumLength(ModuleConstants.IdLength);
-        RuleFor(x => x.UserId).NotEmpty().MaximumLength(ModuleConstants.IdLength);
+        RuleFor(x => x.StoreId).NotEmpty().MaximumLength(DbContextBase.IdLength);
+        RuleFor(x => x.UserId).NotEmpty().MaximumLength(DbContextBase.IdLength);
     }
 }

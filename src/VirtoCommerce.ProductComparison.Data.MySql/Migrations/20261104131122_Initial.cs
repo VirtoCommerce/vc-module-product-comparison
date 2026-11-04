@@ -110,6 +110,11 @@ namespace VirtoCommerce.ProductComparison.Data.MySql.Migrations
                 columns: new[] { "IsAnonymous", "ModifiedDate" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_CompareList_UserId",
+                table: "CompareList",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_CompareList_UserId_StoreId_OrganizationId",
                 table: "CompareList",
                 columns: new[] { "UserId", "StoreId", "OrganizationId" },

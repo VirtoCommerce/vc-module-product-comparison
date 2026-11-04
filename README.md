@@ -33,7 +33,8 @@ All fields are on the main schema, `POST /graphql`. A scoped schema with only th
 **Who may use a list.** The rules are the guest cart's:
 
 * a signed-in buyer passes their own user id;
-* a guest passes the anonymous user id the storefront keeps for them; an id that belongs to a registered user is refused;
+* a guest passes the anonymous user id the storefront keeps for them and reaches only guest lists; an id that belongs
+  to a registered user is refused;
 * an administrator may use any user id.
 
 The organization is never an argument: the list belongs to the organization in the caller's token, so a buyer who
@@ -212,8 +213,8 @@ plugin.
 
 To work on it, run these in `StorefrontApp`: `yarn install`, `yarn build` (output in `../plugins/vc-frontend`),
 `yarn test`, `yarn type-check` and `yarn lint`. `APP_BACKEND_URL=<backend url> yarn generate:graphql-types`
-regenerates the GraphQL types: the module's operations from its scoped schema, and the two storefront operations the
-page also runs (the configured price and the add-to-cart event) from `/graphql`.
+regenerates the GraphQL types: the module's operations from its scoped schema, and the storefront operation the page
+also runs (the configured price) from `/graphql`.
 
 ### Accepted limits
 

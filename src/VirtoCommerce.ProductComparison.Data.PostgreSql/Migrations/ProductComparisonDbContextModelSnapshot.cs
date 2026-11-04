@@ -62,6 +62,8 @@ namespace VirtoCommerce.ProductComparison.Data.PostgreSql.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("UserId");
+
                     b.HasIndex("IsAnonymous", "ModifiedDate");
 
                     b.HasIndex("UserId", "StoreId", "OrganizationId")

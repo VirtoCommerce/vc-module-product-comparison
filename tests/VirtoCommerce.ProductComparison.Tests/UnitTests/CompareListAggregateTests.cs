@@ -5,12 +5,12 @@ using FluentAssertions;
 using GraphQL;
 using VirtoCommerce.ProductComparison.Core;
 using VirtoCommerce.ProductComparison.Core.Models;
-using CatalogModuleConstants = VirtoCommerce.CatalogModule.Core.ModuleConstants;
 using VirtoCommerce.ProductComparison.Xapi;
 using VirtoCommerce.ProductComparison.Xapi.Aggregates;
 using VirtoCommerce.ProductComparison.Xapi.Models;
 using VirtoCommerce.XCart.Core.Models;
 using Xunit;
+using CatalogModuleConstants = VirtoCommerce.CatalogModule.Core.ModuleConstants;
 
 namespace VirtoCommerce.ProductComparison.Tests.UnitTests;
 

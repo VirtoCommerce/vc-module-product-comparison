@@ -1,5 +1,5 @@
 using FluentValidation;
-using VirtoCommerce.ProductComparison.Core;
+using VirtoCommerce.Platform.Data.Infrastructure;
 using VirtoCommerce.ProductComparison.Xapi.Commands;
 
 namespace VirtoCommerce.ProductComparison.Xapi.Validators;
@@ -8,6 +8,6 @@ public class MergeCompareListCommandValidator : CompareListRequestValidator<Merg
 {
     public MergeCompareListCommandValidator()
     {
-        RuleFor(x => x.SecondListId).NotEmpty().MaximumLength(ModuleConstants.IdLength);
+        RuleFor(x => x.SecondListId).NotEmpty().MaximumLength(DbContextBase.IdLength);
     }
 }

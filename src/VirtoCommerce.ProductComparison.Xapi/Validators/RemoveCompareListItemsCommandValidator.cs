@@ -1,5 +1,5 @@
 using FluentValidation;
-using VirtoCommerce.ProductComparison.Core;
+using VirtoCommerce.Platform.Data.Infrastructure;
 using VirtoCommerce.ProductComparison.Xapi.Commands;
 
 namespace VirtoCommerce.ProductComparison.Xapi.Validators;
@@ -9,6 +9,6 @@ public class RemoveCompareListItemsCommandValidator : CompareListRequestValidato
     public RemoveCompareListItemsCommandValidator()
     {
         RuleFor(x => x.ItemIds).NotEmpty();
-        RuleForEach(x => x.ItemIds).NotEmpty().MaximumLength(ModuleConstants.IdLength);
+        RuleForEach(x => x.ItemIds).NotEmpty().MaximumLength(DbContextBase.IdLength);
     }
 }

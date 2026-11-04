@@ -26,6 +26,9 @@ public class ProductComparisonDbContext : DbContextBase
         // A NULL organization never collides in a unique index, so a list without one isn't protected from a
         // concurrent duplicate; accepted as rare (VCST-5918).
         modelBuilder.Entity<CompareListEntity>().HasIndex(x => new { x.UserId, x.StoreId, x.OrganizationId }).IsUnique();
+        // On SQL Server EF filters NULLs out of the unique index above, so the lookup of a list without an organization
+        // (every guest's) needs its own index.
+        modelBuilder.Entity<CompareListEntity>().HasIndex(x => x.UserId);
         modelBuilder.Entity<CompareListEntity>().HasIndex(x => new { x.IsAnonymous, x.ModifiedDate });
 
         modelBuilder.Entity<CompareListItemEntity>().ToAuditableEntityTable("CompareListItem");
