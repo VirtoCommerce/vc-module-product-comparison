@@ -26,4 +26,5 @@
     <ProjectReference Include="..\VirtoCommerce.ProductComparison.Data.SqlServer\VirtoCommerce.ProductComparison.Data.SqlServer.csproj" />
     <ProjectReference Include="..\VirtoCommerce.ProductComparison.Xapi\VirtoCommerce.ProductComparison.Xapi.csproj" />
   </ItemGroup>
+  <Import Project="StorefrontApp\storefront-plugin.targets" />
 </Project>

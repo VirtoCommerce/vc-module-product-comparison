@@ -1,22 +1,36 @@
+using System;
+using FluentValidation;
 using GraphQL.MicrosoftDI;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using VirtoCommerce.CatalogModule.Core.Events;
+using VirtoCommerce.Platform.Core.Events;
+using VirtoCommerce.Platform.Core.Jobs;
 using VirtoCommerce.Platform.Core.Modularity;
-using VirtoCommerce.Platform.Core.Security;
 using VirtoCommerce.Platform.Core.Settings;
 using VirtoCommerce.Platform.Data.MySql.Extensions;
 using VirtoCommerce.Platform.Data.PostgreSql.Extensions;
 using VirtoCommerce.Platform.Data.SqlServer.Extensions;
-using VirtoCommerce.Xapi.Core.Extensions;
-using VirtoCommerce.Xapi.Core.Infrastructure;
 using VirtoCommerce.ProductComparison.Core;
+using VirtoCommerce.ProductComparison.Core.Services;
+using VirtoCommerce.ProductComparison.Data.BackgroundJobs;
+using VirtoCommerce.ProductComparison.Data.Handlers;
 using VirtoCommerce.ProductComparison.Data.MySql;
 using VirtoCommerce.ProductComparison.Data.PostgreSql;
 using VirtoCommerce.ProductComparison.Data.Repositories;
+using VirtoCommerce.ProductComparison.Data.Services;
 using VirtoCommerce.ProductComparison.Data.SqlServer;
 using VirtoCommerce.ProductComparison.Xapi;
+using VirtoCommerce.ProductComparison.Xapi.Aggregates;
+using VirtoCommerce.ProductComparison.Xapi.Authorization;
+using VirtoCommerce.ProductComparison.Xapi.Commands;
+using VirtoCommerce.ProductComparison.Xapi.Queries;
+using VirtoCommerce.ProductComparison.Xapi.Validators;
+using VirtoCommerce.Xapi.Core.Extensions;
+using VirtoCommerce.Xapi.Core.Infrastructure;
 
 namespace VirtoCommerce.ProductComparison.Web;
 
@@ -46,14 +60,28 @@ public class Module : IModule, IHasConfiguration
             }
         });
 
-        // Override models
-        //AbstractTypeFactory<OriginalModel>.OverrideType<OriginalModel, ExtendedModel>().MapToType<ExtendedEntity>();
-        //AbstractTypeFactory<OriginalEntity>.OverrideType<OriginalEntity, ExtendedEntity>();
+        serviceCollection.AddTransient<IProductComparisonRepository, ProductComparisonRepository>();
+        serviceCollection.AddSingleton<Func<IProductComparisonRepository>>(provider => () => provider.CreateScope().ServiceProvider.GetRequiredService<IProductComparisonRepository>());
 
-        // Register services
-        //serviceCollection.AddTransient<IMyService, MyService>();
+        serviceCollection.AddTransient<ICompareListService, CompareListService>();
+        serviceCollection.AddTransient<ICompareListSearchService, CompareListSearchService>();
+        serviceCollection.AddTransient<ProductChangedEventHandler>();
 
-        // Register GraphQL schema
+        serviceCollection.AddTransient<CleanupCompareListsJob>();
+        serviceCollection.AddRecurringJob<CleanupCompareListsJobHandler, CleanupCompareListsJobPayload>(schedule => schedule
+            .WithId(nameof(CleanupCompareListsJob))
+            .FromSettings(ModuleConstants.Settings.Cleanup.Enabled, ModuleConstants.Settings.Cleanup.Cron));
+
+        serviceCollection.AddTransient<ICompareListAggregateRepository, CompareListAggregateRepository>();
+        serviceCollection.AddSingleton<IAuthorizationHandler, CanAccessCompareListAuthorizationHandler>();
+        serviceCollection.AddTransient<AbstractValidator<GetCompareListQuery>, GetCompareListQueryValidator>();
+        serviceCollection.AddTransient<AbstractValidator<SaveProductsToCompareListCommand>, SaveProductsToCompareListCommandValidator>();
+        serviceCollection.AddTransient<AbstractValidator<RemoveCompareListItemsCommand>, RemoveCompareListItemsCommandValidator>();
+        serviceCollection.AddTransient<AbstractValidator<ClearCompareListCommand>, CompareListCommandValidator<ClearCompareListCommand>>();
+        serviceCollection.AddTransient<AbstractValidator<ClearCompareListCategoryCommand>, ClearCompareListCategoryCommandValidator>();
+        serviceCollection.AddTransient<AbstractValidator<MergeCompareListCommand>, MergeCompareListCommandValidator>();
+        serviceCollection.AddTransient<AbstractValidator<MoveCompareListItemCommand>, MoveCompareListItemCommandValidator>();
+
         _ = new GraphQLBuilder(serviceCollection, builder =>
         {
             builder.AddSchema(serviceCollection, typeof(XapiAssemblyMarker));
@@ -66,18 +94,14 @@ public class Module : IModule, IHasConfiguration
     {
         var serviceProvider = appBuilder.ApplicationServices;
 
-        // Register settings
         var settingsRegistrar = serviceProvider.GetRequiredService<ISettingsRegistrar>();
         settingsRegistrar.RegisterSettings(ModuleConstants.Settings.AllSettings, ModuleInfo.Id);
+        settingsRegistrar.RegisterSettingsForType(ModuleConstants.Settings.StoreLevelSettings, "Store");
 
-        // Register permissions
-        var permissionsRegistrar = serviceProvider.GetRequiredService<IPermissionsRegistrar>();
-        permissionsRegistrar.RegisterPermissions(ModuleInfo.Id, "Product Comparison", ModuleConstants.Security.Permissions.AllPermissions);
-
-        // Register partial GraphQL schema
         appBuilder.UseScopedSchema<XapiAssemblyMarker>("product-comparison");
 
-        // Apply migrations
+        appBuilder.RegisterEventHandler<ProductChangedEvent, ProductChangedEventHandler>();
+
         using var serviceScope = serviceProvider.CreateScope();
         using var dbContext = serviceScope.ServiceProvider.GetRequiredService<ProductComparisonDbContext>();
         dbContext.Database.Migrate();

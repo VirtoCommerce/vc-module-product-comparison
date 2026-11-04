@@ -10,12 +10,29 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="FluentAssertions" Version="7.2.0" />
+    <!-- Must match the module's EF Core (10.0.12), or the build warns MSB3277. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.4.0" />
+    <!-- Storefront E2E only: the browser that drives the real storefront. -->
+    <PackageReference Include="Microsoft.Playwright" Version="1.63.0" />
+    <!-- Storefront E2E only: the platform's AppManifestService, which answers store.plugins from the module's plugin build. -->
+    <PackageReference Include="VirtoCommerce.Platform.Modules" Version="3.1078.0" />
+    <!-- Storefront E2E only: the real UserType the storefront's page context selects. -->
+    <PackageReference Include="VirtoCommerce.ProfileExperienceApiModule.Data" Version="3.1020.0" />
+    <!-- Test-only: the real UserManagerCore, the account-state check every compare list endpoint runs. -->
+    <PackageReference Include="VirtoCommerce.Xapi.Data" Version="3.1027.0" />
+    <!-- Storefront E2E only: the real product root field (DigitalCatalogSchema) and the store access rule it applies. -->
+    <PackageReference Include="VirtoCommerce.XCatalog.Data" Version="3.1023.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="xunit.v3" Version="3.2.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Storefront E2E only: Kestrel, which hosts the harness for the real storefront. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\VirtoCommerce.ProductComparison.Core\VirtoCommerce.ProductComparison.Core.csproj" />

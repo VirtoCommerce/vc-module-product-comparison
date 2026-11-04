@@ -4,7 +4,13 @@
     <SonarQubeTestProject>false</SonarQubeTestProject>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="VirtoCommerce.Xapi.Core" Version="3.1026.0" />
+    <PackageReference Include="FluentValidation" Version="12.1.1" />
+    <PackageReference Include="VirtoCommerce.CoreModule.Core" Version="3.1012.0" />
+    <PackageReference Include="VirtoCommerce.Platform.Security" Version="3.1078.0" />
+    <PackageReference Include="VirtoCommerce.StoreModule.Core" Version="3.1009.0" />
+    <PackageReference Include="VirtoCommerce.Xapi.Core" Version="3.1027.0" />
+    <PackageReference Include="VirtoCommerce.XCart.Core" Version="3.1042.0" />
+    <PackageReference Include="VirtoCommerce.XCatalog.Core" Version="3.1023.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\VirtoCommerce.ProductComparison.Core\VirtoCommerce.ProductComparison.Core.csproj" />

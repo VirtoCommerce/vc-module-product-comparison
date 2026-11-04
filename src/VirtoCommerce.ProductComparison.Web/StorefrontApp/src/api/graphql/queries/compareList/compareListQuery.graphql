@@ -1,0 +1,7 @@
+#import "../../fragments/compareList.graphql"
+
+query CompareList($storeId: String!, $userId: String!) {
+  compareList(storeId: $storeId, userId: $userId) {
+    ...compareList
+  }
+}

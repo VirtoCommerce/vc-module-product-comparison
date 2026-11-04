@@ -4,13 +4,20 @@
   <version>3.1000.0</version>
   <version-tag></version-tag>
 
-  <platformVersion>3.1076.3</platformVersion>
+  <platformVersion>3.1078.0</platformVersion>
   <dependencies>
-    <dependency id="VirtoCommerce.Xapi" version="3.1026.0" />
+    <dependency id="VirtoCommerce.Catalog" version="3.1048.0" />
+    <dependency id="VirtoCommerce.Core" version="3.1012.0" />
+    <dependency id="VirtoCommerce.Customer" version="3.1028.0" />
+    <dependency id="VirtoCommerce.Store" version="3.1009.0" />
+    <dependency id="VirtoCommerce.Xapi" version="3.1027.0" />
+    <dependency id="VirtoCommerce.XCart" version="3.1042.0" />
+    <dependency id="VirtoCommerce.XCatalog" version="3.1023.0" />
+    <dependency id="VirtoCommerce.XFrontend" version="3.1005.0" />
   </dependencies>
 
   <title>Virto Commerce Product Comparison</title>
-  <description>Virto Commerce Product Comparison</description>
+  <description>Product compare lists stored on the server for signed-in buyers and guests, with the storefront's compare UI as a plugin</description>
 
   <authors>
     <author>VirtoCommerce</author>
@@ -19,7 +26,7 @@
     <owner>Virto Commerce</owner>
   </owners>
 
-  <projectUrl>https://github.com/Virto Commerce/vc-module-product-comparison</projectUrl>
+  <projectUrl>https://github.com/VirtoCommerce/vc-module-product-comparison</projectUrl>
   <iconUrl>Modules/$(VirtoCommerce.ProductComparison)/Content/logo.png</iconUrl>
   <requireLicenseAcceptance>false</requireLicenseAcceptance>
 

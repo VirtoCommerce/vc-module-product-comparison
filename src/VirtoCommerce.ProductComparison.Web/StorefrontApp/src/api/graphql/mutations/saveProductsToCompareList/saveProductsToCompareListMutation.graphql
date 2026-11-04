@@ -1,0 +1,7 @@
+#import "../../fragments/compareList.graphql"
+
+mutation SaveProductsToCompareList($command: InputSaveProductsToCompareListType!) {
+  saveProductsToCompareList(command: $command) {
+    ...compareList
+  }
+}

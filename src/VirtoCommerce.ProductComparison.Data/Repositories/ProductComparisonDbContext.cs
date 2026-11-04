@@ -1,7 +1,8 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
-//using VirtoCommerce.Platform.Data.Extensions;
+using VirtoCommerce.Platform.Data.Extensions;
 using VirtoCommerce.Platform.Data.Infrastructure;
+using VirtoCommerce.ProductComparison.Data.Models;
 
 namespace VirtoCommerce.ProductComparison.Data.Repositories;
 
@@ -21,7 +22,29 @@ public class ProductComparisonDbContext : DbContextBase
     {
         base.OnModelCreating(modelBuilder);
 
-        //modelBuilder.Entity<BazQuxEntity>().ToAuditableEntityTable("BazQux");
+        modelBuilder.Entity<CompareListEntity>().ToAuditableEntityTable("CompareList");
+        // A NULL organization never collides in a unique index, so a list without one isn't protected from a
+        // concurrent duplicate; accepted as rare (VCST-5918).
+        modelBuilder.Entity<CompareListEntity>().HasIndex(x => new { x.UserId, x.StoreId, x.OrganizationId }).IsUnique();
+        modelBuilder.Entity<CompareListEntity>().HasIndex(x => new { x.IsAnonymous, x.ModifiedDate });
+
+        modelBuilder.Entity<CompareListItemEntity>().ToAuditableEntityTable("CompareListItem");
+        modelBuilder.Entity<CompareListItemEntity>()
+            .HasOne(x => x.CompareList)
+            .WithMany(x => x.Items)
+            .HasForeignKey(x => x.CompareListId)
+            .IsRequired()
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<CompareListItemEntity>().HasIndex(x => new { x.CompareListId, x.ProductId, x.ConfigurationKey }).IsUnique();
+        modelBuilder.Entity<CompareListItemEntity>().HasIndex(x => x.ProductId);
+
+        modelBuilder.Entity<CompareListItemSectionEntity>().ToEntityTable("CompareListItemSection");
+        modelBuilder.Entity<CompareListItemSectionEntity>()
+            .HasOne(x => x.CompareListItem)
+            .WithMany(x => x.Sections)
+            .HasForeignKey(x => x.CompareListItemId)
+            .IsRequired()
+            .OnDelete(DeleteBehavior.Cascade);
 
         switch (Database.ProviderName)
         {
