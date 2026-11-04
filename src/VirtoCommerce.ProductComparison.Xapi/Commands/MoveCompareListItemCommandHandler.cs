@@ -1,9 +1,10 @@
+using FluentValidation;
 using VirtoCommerce.ProductComparison.Xapi.Aggregates;
 
 namespace VirtoCommerce.ProductComparison.Xapi.Commands;
 
-public class MoveCompareListItemCommandHandler(ICompareListAggregateRepository repository)
-    : CompareListCommandHandler<MoveCompareListItemCommand>(repository)
+public class MoveCompareListItemCommandHandler(ICompareListAggregateRepository repository, AbstractValidator<MoveCompareListItemCommand> validator)
+    : CompareListCommandHandler<MoveCompareListItemCommand>(repository, validator)
 {
     protected override void Update(CompareListAggregate aggregate, MoveCompareListItemCommand request)
     {

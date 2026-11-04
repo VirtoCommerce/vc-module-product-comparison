@@ -1,9 +1,7 @@
 using System.Threading.Tasks;
-using FluentValidation;
 using GraphQL;
 using GraphQL.Types;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.Extensions.DependencyInjection;
 using VirtoCommerce.ProductComparison.Xapi.Aggregates;
 using VirtoCommerce.ProductComparison.Xapi.Authorization;
 using VirtoCommerce.ProductComparison.Xapi.Extensions;
@@ -21,7 +19,6 @@ public abstract class CompareListCommandBuilder<TCommand, TCommandGraphType>(IAu
     {
         await base.BeforeMediatorSend(context, request);
 
-        await context.RequestServices.GetRequiredService<AbstractValidator<TCommand>>().ValidateAndThrowAsync(request);
         await context.PrepareCompareListRequestAsync(request);
         await Authorize(context, request.UserId, new CanAccessCompareListAuthorizationRequirement());
     }

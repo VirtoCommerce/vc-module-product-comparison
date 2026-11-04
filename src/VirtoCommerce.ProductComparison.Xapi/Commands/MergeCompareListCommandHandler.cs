@@ -1,16 +1,19 @@
 using System.Threading;
 using System.Threading.Tasks;
+using FluentValidation;
 using MediatR;
 using VirtoCommerce.Platform.Core.Common;
 using VirtoCommerce.ProductComparison.Xapi.Aggregates;
 
 namespace VirtoCommerce.ProductComparison.Xapi.Commands;
 
-public class MergeCompareListCommandHandler(ICompareListAggregateRepository repository)
+public class MergeCompareListCommandHandler(ICompareListAggregateRepository repository, AbstractValidator<MergeCompareListCommand> validator)
     : IRequestHandler<MergeCompareListCommand, CompareListAggregate>
 {
     public virtual async Task<CompareListAggregate> Handle(MergeCompareListCommand request, CancellationToken cancellationToken)
     {
+        await validator.ValidateAndThrowAsync(request, cancellationToken);
+
         var aggregate = await repository.GetAsync(request);
         aggregate.EnsureAvailable();
 

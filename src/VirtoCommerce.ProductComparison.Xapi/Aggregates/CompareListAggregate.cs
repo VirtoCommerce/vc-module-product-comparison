@@ -29,19 +29,25 @@ public class CompareListAggregate
     public bool IsSaved => !List.IsTransient();
 
     // Categories in the order they were first added; each shows at most MaxItems items, as the storefront always did.
-    public virtual IList<CompareListCategory> Categories => List.Items
-        .GroupBy(x => GetCategoryKey(x.CategoryId), StringComparer.OrdinalIgnoreCase)
-        .OrderBy(group => group.Min(x => x.CreatedDate))
-        .Select(group =>
-        {
-            var category = AbstractTypeFactory<CompareListCategory>.TryCreateInstance();
-            category.CategoryId = group.First().CategoryId;
-            category.Items = ByPosition(group).Take(MaxItems).ToList();
-            return category;
-        })
-        .ToList();
+    public virtual IList<CompareListCategory> GetCategories()
+    {
+        return List.Items
+            .GroupBy(x => GetCategoryKey(x.CategoryId), StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Min(x => x.CreatedDate))
+            .Select(group =>
+            {
+                var category = AbstractTypeFactory<CompareListCategory>.TryCreateInstance();
+                category.CategoryId = group.First().CategoryId;
+                category.Items = ByPosition(group).Take(MaxItems).ToList();
+                return category;
+            })
+            .ToList();
+    }
 
-    public virtual IList<CompareListItem> VisibleItems => Categories.SelectMany(x => x.Items).ToList();
+    public virtual IList<CompareListItem> GetVisibleItems()
+    {
+        return GetCategories().SelectMany(x => x.Items).ToList();
+    }
 
     public virtual bool IsAvailable => IsEnabled && (!List.IsAnonymous || IsAnonymousListEnabled);
 

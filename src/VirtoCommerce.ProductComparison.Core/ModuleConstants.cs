@@ -8,6 +8,8 @@ public static class ModuleConstants
 {
     public const int MaxListItems = 500;
 
+    public const int MaxConfigurationSections = 100;
+
     public const int CustomTextLength = 255;
 
     public static class Settings

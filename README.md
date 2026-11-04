@@ -139,7 +139,7 @@ A refusal is a GraphQL error whose `extensions.code` names the reason:
 | `COMPARE_LIST_FULL` | The save would put more than 500 products into the list |
 | `STORE_NOT_FOUND` | No store with the given id |
 | `Unauthorized`, `Forbidden` | The caller may not use the given user id |
-| `VALIDATION` | The input is malformed: an empty id, a `File` section, text over 255 characters |
+| `VALIDATION` | The input is malformed or too large: an empty or over-long id, a `File` section, text over 255 characters, more than 500 products or item ids in one call, more than 100 configuration sections for a product, or one section chosen twice |
 
 ## How it works
 
@@ -184,7 +184,8 @@ deletes:
 * lists for an organization the user can no longer pick when signing in, because their contact or employee no longer
   belongs to it.
 
-A product deleted from the catalog leaves every list at once, through the catalog's product change event.
+A product deleted from the catalog leaves every list at once, through the catalog's product change event. The
+removal is one set-based delete, so it raises no `CompareListChangingEvent` or `CompareListChangedEvent`.
 
 ### Storefront plugin
 
@@ -220,8 +221,10 @@ also runs (the configured price) from `/graphql`.
 
 * Two first saves at the same moment, for example from two tabs, can create a second list for a guest or for a user
   without an organization: the unique key doesn't cover an empty organization. Every lookup then uses the oldest list.
-* Two saves at the same moment can put one product more than the limit into a category; the list still shows at most
-  the limit per category.
+* Two changes at the same moment each save the list they read, so one can undo the other: an added product goes
+  missing, or a removed one comes back. Two saves can also put one product more than the limit into a category (the
+  list still shows at most the limit per category), and the same product added twice at once fails once, with an
+  error that carries no code.
 * Variations deleted together with their main product stay in lists. The catalog deletes them in the database, and
   its product change event names only the main product. They show as no longer available until the buyer removes
   them.
@@ -243,7 +246,8 @@ also runs (the configured price) from `/graphql`.
 
 The per-store settings are registered for the `Store` type and marked public, so the storefront plugin reads them from
 `store.settings.modules`. They replace the theme settings `product_compare_enabled` and `product_compare_limit`, which
-the storefront no longer reads.
+the storefront no longer reads. Their values are not carried over: a store that turned compare off or changed the
+limit in the theme sets these store settings again.
 
 ## Dependencies
 

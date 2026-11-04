@@ -24,8 +24,6 @@
     "plugin.config.ts"
   ],
   "vueCompilerOptions": {
-    // strictTemplates minus its unknown-props check, which refuses the attributes host components pass through
-    // (aria-*, data-*, id, tabindex).
     "checkUnknownComponents": true,
     "checkUnknownDirectives": true,
     "checkUnknownEvents": true

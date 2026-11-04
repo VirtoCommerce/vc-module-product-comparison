@@ -35,11 +35,19 @@ export function getDisplayPrice(product: CompareProductFragment) {
   return product.hasVariations && product.minVariationPrice ? product.minVariationPrice : product.price;
 }
 
+// Ordinal, as the server sorts section ids.
+function compareOrdinal(a: string, b: string): number {
+  if (a === b) {
+    return 0;
+  }
+  return a < b ? -1 : 1;
+}
+
 // The server's configuration key, so a list item and the product page's selection match as the server matches
 // them: sections by id, then id, type, product, quantity and text.
 function getConfigurationKey(sections: SectionKeyPartsType[]): string {
   return [...sections]
-    .sort((a, b) => (a.sectionId < b.sectionId ? -1 : a.sectionId > b.sectionId ? 1 : 0))
+    .sort((a, b) => compareOrdinal(a.sectionId, b.sectionId))
     .map((x) => [x.sectionId, x.type, x.productId ?? "", x.quantity ?? "", x.customText ?? ""].join("|"))
     .join("\n");
 }

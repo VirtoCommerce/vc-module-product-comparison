@@ -18,16 +18,16 @@ public class CompareListType : ExtendableGraphType<CompareListAggregate>
 
         Field<NonNullGraphType<IntGraphType>>("itemsCount")
             .Description("Number of compared products; each category counts up to the store's limit")
-            .Resolve(context => context.Source.VisibleItems.Count);
+            .Resolve(context => context.Source.GetVisibleItems().Count);
 
         ExtendableField<NonNullGraphType<ListGraphType<NonNullGraphType<CompareListItemType>>>>(
             "items",
             "Compared products, by category, then by position",
-            resolve: context => context.Source.VisibleItems);
+            resolve: context => context.Source.GetVisibleItems());
 
         ExtendableField<NonNullGraphType<ListGraphType<NonNullGraphType<CompareListCategoryType>>>>(
             "categories",
             "Compared products grouped by category, in the order the categories were first added",
-            resolve: context => context.Source.Categories);
+            resolve: context => context.Source.GetCategories());
     }
 }

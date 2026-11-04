@@ -85,7 +85,9 @@ function getAvailabilitySignature(product: CompareProductFragment): string {
   }
 
   const quantity = product.availabilityData.availableQuantity;
-  return `in-stock:${quantity > MAX_DISPLAY_IN_STOCK_QUANTITY ? `${MAX_DISPLAY_IN_STOCK_QUANTITY}+` : quantity}`;
+  const shownQuantity =
+    quantity > MAX_DISPLAY_IN_STOCK_QUANTITY ? `${MAX_DISPLAY_IN_STOCK_QUANTITY}+` : String(quantity);
+  return `in-stock:${shownQuantity}`;
 }
 
 function getSectionValue(section: SectionType): string | undefined {

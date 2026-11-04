@@ -92,6 +92,22 @@ public class CompareListStoreSettingsGraphQlTests
     }
 
     [Fact]
+    public async Task UnknownStore_IsRefusedWithStoreNotFound_AndNothingIsStored()
+    {
+        // Every call reads the store's settings first, so a store id the platform doesn't know stops it before a list
+        // is read or created.
+        using var ctx = ProductComparisonTestContext.Create();
+
+        var query = await ctx.ExecuteAsGuestAsync(Query(GuestId, "unknown-store"));
+        var save = await ctx.ExecuteAsGuestAsync(SaveProductsInStore("unknown-store", GuestId, "printer-1@printers"));
+
+        query.ErrorCode.Should().Be(CompareListErrors.StoreNotFoundCode);
+        save.ErrorCode.Should().Be(CompareListErrors.StoreNotFoundCode);
+        await using var db = ctx.NewDbContext();
+        (await db.Set<CompareListEntity>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
     public async Task CategoryAtItsLimit_RefusesTheWholeCall_OtherCategoriesStillTakeProducts()
     {
         // D3: the limit caps each category group, not the list, as the storefront's own limit did.

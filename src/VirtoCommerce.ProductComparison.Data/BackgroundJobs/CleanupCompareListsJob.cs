@@ -106,7 +106,8 @@ public class CleanupCompareListsJob(
         var users = (await userSearchService.SearchUsersAsync(userCriteria)).Results;
 
         var memberIds = users.Select(x => x.MemberId).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToArray();
-        var members = memberIds.Length > 0 ? await memberService.GetByIdsAsync(memberIds) : [];
+        // Organizations come with any response group; the rest of a member isn't needed here.
+        var members = memberIds.Length > 0 ? await memberService.GetByIdsAsync(memberIds, MemberResponseGroup.Default.ToString()) : [];
 
         var memberIdsByUserId = users.ToDictionary(x => x.Id, x => x.MemberId);
         var organizationIdsByMemberId = members.ToDictionary(x => x.Id, GetOrganizationIds);

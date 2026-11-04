@@ -16,6 +16,9 @@ internal sealed class TestMemberService : IMemberService
 {
     private readonly ConcurrentDictionary<string, Member> _members = new(StringComparer.Ordinal);
 
+    /// <summary>The response group of every member load, in order.</summary>
+    public ConcurrentQueue<string> ResponseGroups { get; } = new();
+
     public Contact AddContact(string memberId, params string[] organizationIds)
     {
         var contact = new Contact { Id = memberId, Name = memberId, Organizations = organizationIds.ToList() };
@@ -34,6 +37,8 @@ internal sealed class TestMemberService : IMemberService
 
     public Task<Member[]> GetByIdsAsync(string[] memberIds, string responseGroup = null, string[] memberTypes = null)
     {
+        ResponseGroups.Enqueue(responseGroup);
+
         var members = memberIds
             .Select(id => _members.GetValueOrDefault(id))
             .Where(x => x != null)

@@ -1,8 +1,6 @@
 using System.Threading.Tasks;
-using FluentValidation;
 using GraphQL;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.Extensions.DependencyInjection;
 using VirtoCommerce.ProductComparison.Xapi.Aggregates;
 using VirtoCommerce.ProductComparison.Xapi.Authorization;
 using VirtoCommerce.ProductComparison.Xapi.Extensions;
@@ -20,7 +18,6 @@ public class CompareListQueryBuilder(IAuthorizationService authorizationService)
     {
         await base.BeforeMediatorSend(context, request);
 
-        await context.RequestServices.GetRequiredService<AbstractValidator<GetCompareListQuery>>().ValidateAndThrowAsync(request);
         await context.PrepareCompareListRequestAsync(request);
         await Authorize(context, request.UserId, new CanAccessCompareListAuthorizationRequirement());
     }

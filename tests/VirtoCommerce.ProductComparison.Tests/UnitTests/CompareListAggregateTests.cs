@@ -49,7 +49,7 @@ public class CompareListAggregateTests
         aggregate.SaveProducts([Product("p1", string.Empty), Product("p2", null)]);
 
         aggregate.List.Items.Should().OnlyContain(x => x.CategoryId == null);
-        aggregate.Categories.Should().ContainSingle().Which.Items.Should().HaveCount(2);
+        aggregate.GetCategories().Should().ContainSingle().Which.Items.Should().HaveCount(2);
     }
 
     [Fact]
@@ -141,9 +141,9 @@ public class CompareListAggregateTests
             Item("i4", "p4", Printers, position: 2, minutes: 3),
         ]);
 
-        aggregate.Categories.Select(x => x.CategoryId).Should().Equal(Printers, Laptops);
-        aggregate.Categories[0].Items.Select(x => x.Id).Should().Equal("i3", "i2");
-        aggregate.VisibleItems.Select(x => x.Id).Should().Equal("i3", "i2", "i1");
+        aggregate.GetCategories().Select(x => x.CategoryId).Should().Equal(Printers, Laptops);
+        aggregate.GetCategories()[0].Items.Select(x => x.Id).Should().Equal("i3", "i2");
+        aggregate.GetVisibleItems().Select(x => x.Id).Should().Equal("i3", "i2", "i1");
     }
 
     [Fact]

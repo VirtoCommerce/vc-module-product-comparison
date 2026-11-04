@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using FluentValidation;
 using VirtoCommerce.Platform.Data.Infrastructure;
 using VirtoCommerce.ProductComparison.Core;
@@ -12,6 +14,13 @@ public class CompareListProductValidator : AbstractValidator<CompareListProduct>
     {
         RuleFor(x => x.ProductId).NotEmpty().MaximumLength(DbContextBase.IdLength);
         RuleFor(x => x.CategoryId).MaximumLength(DbContextBase.IdLength);
+
+        RuleFor(x => x.ConfigurationSections)
+            .Must(sections => sections.Count <= ModuleConstants.MaxConfigurationSections)
+            .WithMessage($"A product can have at most {ModuleConstants.MaxConfigurationSections} configuration sections")
+            .Must(sections => sections.Select(x => x.SectionId).Distinct(StringComparer.OrdinalIgnoreCase).Count() == sections.Count)
+            .WithMessage("A configuration section can be chosen only once")
+            .When(x => x.ConfigurationSections != null);
 
         RuleForEach(x => x.ConfigurationSections).ChildRules(section =>
         {

@@ -1,11 +1,12 @@
 using System.Threading;
 using System.Threading.Tasks;
+using FluentValidation;
 using MediatR;
 using VirtoCommerce.ProductComparison.Xapi.Aggregates;
 
 namespace VirtoCommerce.ProductComparison.Xapi.Commands;
 
-public abstract class CompareListCommandHandler<TCommand>(ICompareListAggregateRepository repository)
+public abstract class CompareListCommandHandler<TCommand>(ICompareListAggregateRepository repository, AbstractValidator<TCommand> validator)
     : IRequestHandler<TCommand, CompareListAggregate>
     where TCommand : CompareListCommand
 {
@@ -14,6 +15,8 @@ public abstract class CompareListCommandHandler<TCommand>(ICompareListAggregateR
 
     public virtual async Task<CompareListAggregate> Handle(TCommand request, CancellationToken cancellationToken)
     {
+        await validator.ValidateAndThrowAsync(request, cancellationToken);
+
         var aggregate = await repository.GetAsync(request);
         aggregate.EnsureAvailable();
 

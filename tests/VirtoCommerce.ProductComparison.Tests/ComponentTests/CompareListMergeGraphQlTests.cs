@@ -94,6 +94,21 @@ public class CompareListMergeGraphQlTests
         (await db.Set<CompareListEntity>().Select(x => x.UserId).ToListAsync(TestContext.Current.CancellationToken)).Should().Equal("buyer-2");
     }
 
+    [Fact]
+    public async Task Merge_TheAccountListIntoItself_ChangesNothing()
+    {
+        // Without its own check, the merge would take the list's items over from itself and then delete the "source":
+        // the buyer's whole list.
+        using var ctx = ProductComparisonTestContext.Create();
+        ctx.Users.Add("buyer-1");
+        var saved = (await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-1@printers", "laptop-1@laptops"))).Data("saveProductsToCompareList");
+
+        var merged = (await ctx.ExecuteAsBuyerAsync("buyer-1", Merge(saved.GetProperty("id").GetString()))).Data("mergeCompareList");
+
+        Items(merged).Should().Equal("printer-1@printers#0", "laptop-1@laptops#0");
+        Items((await ctx.ExecuteAsBuyerAsync("buyer-1", Query("buyer-1"))).Data("compareList")).Should().Equal("printer-1@printers#0", "laptop-1@laptops#0");
+    }
+
     private static string Merge(string secondListId, string userId = "buyer-1")
     {
         return Mutation("mergeCompareList", userId, $"""secondListId: "{secondListId}" """);

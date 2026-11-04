@@ -29,6 +29,7 @@ using VirtoCommerce.ProductComparison.Xapi.Authorization;
 using VirtoCommerce.ProductComparison.Xapi.Commands;
 using VirtoCommerce.ProductComparison.Xapi.Queries;
 using VirtoCommerce.ProductComparison.Xapi.Validators;
+using VirtoCommerce.StoreModule.Core.Model;
 using VirtoCommerce.Xapi.Core.Extensions;
 using VirtoCommerce.Xapi.Core.Infrastructure;
 
@@ -96,7 +97,7 @@ public class Module : IModule, IHasConfiguration
 
         var settingsRegistrar = serviceProvider.GetRequiredService<ISettingsRegistrar>();
         settingsRegistrar.RegisterSettings(ModuleConstants.Settings.AllSettings, ModuleInfo.Id);
-        settingsRegistrar.RegisterSettingsForType(ModuleConstants.Settings.StoreLevelSettings, "Store");
+        settingsRegistrar.RegisterSettingsForType(ModuleConstants.Settings.StoreLevelSettings, nameof(Store));
 
         appBuilder.UseScopedSchema<XapiAssemblyMarker>("product-comparison");
 

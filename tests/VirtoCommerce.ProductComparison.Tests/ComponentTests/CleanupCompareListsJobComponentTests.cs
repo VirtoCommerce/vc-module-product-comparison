@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using VirtoCommerce.CustomerModule.Core.Model;
 using VirtoCommerce.Platform.Core.Common;
 using VirtoCommerce.ProductComparison.Core;
 using VirtoCommerce.ProductComparison.Core.Models;
@@ -122,6 +123,9 @@ public class CleanupCompareListsJobComponentTests
         remaining.Should().BeEquivalentTo(
             new[] { "buyer-1", "buyer-1 org-1", "buyer-3", "buyer-4", "employee-1 org-3", "guest" }.Select(x => lists[x].Id),
             "a list stays while its user exists and the list's organization, if any, is one the user can still pick");
+        // Only the organizations are read, and they load with any response group: the smallest one skips the rest
+        // of each member (addresses, notes, security accounts, ...).
+        ctx.Members.ResponseGroups.Should().NotBeEmpty().And.AllBe(nameof(MemberResponseGroup.Default));
     }
 
     [Fact]

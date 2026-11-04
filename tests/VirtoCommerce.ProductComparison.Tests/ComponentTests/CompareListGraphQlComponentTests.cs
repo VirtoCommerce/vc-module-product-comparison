@@ -2,9 +2,17 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using FluentAssertions;
+using FluentValidation;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using VirtoCommerce.ProductComparison.Core;
 using VirtoCommerce.ProductComparison.Data.Models;
 using VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure;
+using VirtoCommerce.ProductComparison.Xapi.Commands;
+using VirtoCommerce.ProductComparison.Xapi.Models;
+using VirtoCommerce.XCart.Core.Models;
+using VirtoCommerce.XCart.Core.Queries;
 using Xunit;
 using static VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure.CompareListDocuments;
 
@@ -153,8 +161,9 @@ public class CompareListGraphQlComponentTests
     [Fact]
     public async Task InvalidInput_IsRefusedBeforeAnythingIsStored()
     {
-        // The validators run in the builders, before the gate and the handler: a File section (the storefront never
-        // compares uploads) and an empty user id are refused with VALIDATION, and no list is created.
+        // The handlers validate before they touch a list, so a caller outside GraphQL gets the same rules: a File
+        // section (the storefront never compares uploads) and an empty product list are refused with VALIDATION,
+        // and no list is created. An empty user id doesn't get that far: the gate refuses it first.
         using var ctx = ProductComparisonTestContext.Create();
         const string fileSection = """{ sectionId: "logo" type: "File" fileUrls: ["https://example.com/logo.png"] }""";
 
@@ -163,7 +172,7 @@ public class CompareListGraphQlComponentTests
         var emptyProductsResponse = await ctx.ExecuteAsGuestAsync(Mutation("saveProductsToCompareList", GuestId, "products: []"));
 
         fileResponse.ErrorCode.Should().Be("VALIDATION");
-        emptyUserResponse.ErrorCode.Should().Be("VALIDATION");
+        emptyUserResponse.ErrorCode.Should().Be("Unauthorized");
         emptyProductsResponse.ErrorCode.Should().Be("VALIDATION");
         await using var db = ctx.NewDbContext();
         (await db.Set<CompareListEntity>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
@@ -174,6 +183,94 @@ public class CompareListGraphQlComponentTests
         return list.GetProperty("items").EnumerateArray()
             .Single(x => x.GetProperty("productId").GetString() == productId)
             .GetProperty("createdDate").GetString();
+    }
+
+    [Fact]
+    public async Task OversizedInput_IsRefusedBeforeAnythingIsStored()
+    {
+        // A guest reaches these mutations without signing in, so what one call may carry is capped: no more products
+        // or item ids than a list can hold, and a bounded number of configuration sections, each chosen once. A
+        // refused call builds and stores nothing.
+        using var ctx = ProductComparisonTestContext.Create();
+        var tooManyProducts = string.Join(" ", Enumerable.Range(0, ModuleConstants.MaxListItems + 1).Select(i => $$"""{ productId: "product-{{i}}" }"""));
+        var tooManySections = string.Join(" ", Enumerable.Range(0, ModuleConstants.MaxConfigurationSections + 1).Select(i => $$"""{ sectionId: "section-{{i}}" type: "Text" customText: "text" }"""));
+        const string sameSectionTwice = """{ sectionId: "engraving" type: "Text" customText: "One" } { sectionId: "ENGRAVING" type: "Text" customText: "Two" }""";
+        var tooManyItemIds = string.Join(" ", Enumerable.Range(0, ModuleConstants.MaxListItems + 1).Select(i => $"\"item-{i}\""));
+
+        var productsResponse = await ctx.ExecuteAsGuestAsync(Mutation("saveProductsToCompareList", GuestId, $"products: [{tooManyProducts}]"));
+        var sectionsResponse = await ctx.ExecuteAsGuestAsync(Mutation("saveProductsToCompareList", GuestId, $$"""products: [{ productId: "printer-1" configurationSections: [{{tooManySections}}] }]"""));
+        var sameSectionResponse = await ctx.ExecuteAsGuestAsync(Mutation("saveProductsToCompareList", GuestId, $$"""products: [{ productId: "printer-1" configurationSections: [{{sameSectionTwice}}] }]"""));
+        var itemIdsResponse = await ctx.ExecuteAsGuestAsync(Mutation("removeCompareListItems", GuestId, $"itemIds: [{tooManyItemIds}]"));
+
+        productsResponse.ErrorCode.Should().Be("VALIDATION");
+        sectionsResponse.ErrorCode.Should().Be("VALIDATION");
+        sameSectionResponse.ErrorCode.Should().Be("VALIDATION", "a section holds one choice, whatever the case of its id");
+        itemIdsResponse.ErrorCode.Should().Be("VALIDATION");
+        await using var db = ctx.NewDbContext();
+        (await db.Set<CompareListEntity>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ConfiguredItem_ShowsEachSectionAsTheCatalogHasItNow()
+    {
+        // Only the buyer's choices are stored; the section itself (name, options) comes from X-Cart's product
+        // configuration query when the list is read. The loader asks once per configurable product, for the sections
+        // its compared items use, so two configurations of one printer cost one query. A section the catalog no
+        // longer has comes back null, and the storefront drops its row.
+        var configurations = new TestProductConfigurationHandler();
+        configurations.Add("printer-1", ("ink", "Ink"), ("engraving", "Engraving"), ("paper", "Paper"));
+        using var ctx = ProductComparisonTestContext.Create(services =>
+            services.AddSingleton<IRequestHandler<GetProductConfigurationQuery, ProductConfigurationQueryResponse>>(configurations));
+        const string inkAndEngraving = """
+            { sectionId: "ink" type: "Product" option: { productId: "ink-black" quantity: 1 } }
+            { sectionId: "engraving" type: "Text" customText: "To the team" }
+            """;
+        const string inkAndRetiredSection = """
+            { sectionId: "ink" type: "Product" option: { productId: "ink-color" quantity: 1 } }
+            { sectionId: "gift-wrap" type: "Text" customText: "Blue" }
+            """;
+        await ctx.ExecuteAsGuestAsync(Mutation("saveProductsToCompareList", GuestId, $$"""products: [{ productId: "printer-1" categoryId: "printers" configurationSections: [{{inkAndEngraving}}] } { productId: "printer-1" categoryId: "printers" configurationSections: [{{inkAndRetiredSection}}] }]"""));
+
+        var list = (await ctx.ExecuteAsGuestAsync($$"""{ compareList(storeId: "{{ProductComparisonTestContext.StoreId}}", userId: "{{GuestId}}") { items { configurationSections { sectionId configurationSection { id name } } } } }""")).Data("compareList");
+
+        var sections = list.GetProperty("items").EnumerateArray()
+            .Select(item => item.GetProperty("configurationSections").EnumerateArray()
+                .Select(x => $"{x.GetProperty("sectionId").GetString()}: {SectionName(x)}")
+                .ToList())
+            .ToList();
+        sections[0].Should().Equal("engraving: Engraving", "ink: Ink");
+        sections[1].Should().Equal("gift-wrap: (none)", "ink: Ink");
+        var query = configurations.Queries.Should().ContainSingle().Subject;
+        (query.ConfigurableProductId, query.StoreId, query.UserId).Should().Be(("printer-1", ProductComparisonTestContext.StoreId, GuestId));
+        query.SectionIds.Should().BeEquivalentTo("engraving", "gift-wrap", "ink");
+    }
+
+    [Fact]
+    public async Task CommandSentPastGraphQl_IsValidatedByItsHandler()
+    {
+        // Another module can send the commands through MediatR without the GraphQL builders. The handlers validate,
+        // so such a caller gets the same rules: here a File section, which the list never stores.
+        using var ctx = ProductComparisonTestContext.Create();
+        var command = new SaveProductsToCompareListCommand
+        {
+            StoreId = ProductComparisonTestContext.StoreId,
+            UserId = GuestId,
+            IsAnonymous = true,
+            Products = [new CompareListProduct { ProductId = "printer-1", ConfigurationSections = [new ProductConfigurationSection { SectionId = "logo", Type = "File" }] }],
+        };
+
+        var send = () => ctx.GetRequiredService<IMediator>().Send(command, TestContext.Current.CancellationToken);
+
+        await send.Should().ThrowAsync<ValidationException>();
+        await using var db = ctx.NewDbContext();
+        (await db.Set<CompareListEntity>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    private static string SectionName(JsonElement section)
+    {
+        var configurationSection = section.GetProperty("configurationSection");
+
+        return configurationSection.ValueKind == JsonValueKind.Null ? "(none)" : configurationSection.GetProperty("name").GetString();
     }
 
     private static string Quantity(JsonElement section)
