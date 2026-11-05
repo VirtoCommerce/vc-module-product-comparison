@@ -329,6 +329,22 @@ and so the module CI, leaves out by default: the CI runner has no storefront. Th
 Playwright's Chromium. [StorefrontE2E/README.md](tests/VirtoCommerce.ProductComparison.Tests/StorefrontE2E/README.md)
 has the details and the run command.
 
+**In GitHub, on demand**, the `E2E tests` workflow (`.github/workflows/e2e-tests.yml`) runs them. Start it from
+Actions → E2E tests → Run workflow, or with
+`gh workflow run e2e-tests.yml --ref <module branch> -f frontend=<vc-frontend ref>`. "Use workflow from" is the
+module branch; the `frontend` input is the vc-frontend branch, tag or commit to test against, empty for its latest
+release:
+
+* A product-comparison change: its branch, `frontend` empty.
+* A change with a vc-frontend part: its branch, and its vc-frontend branch in `frontend`.
+* A vc-frontend change alone, a UI kit change for example: `dev`, and that vc-frontend branch in `frontend`.
+
+Until a vc-frontend release carries the host side of VCST-5918, `frontend` names the ticket's vc-frontend branch. The
+run builds that storefront and the compare plugin, serves the storefront build (`VC_STOREFRONT_BUILD`) and gives the
+contract test the same checkout (`VC_STOREFRONT_DIR`). Its summary names both commits; a failed run attaches the
+diagnostics folder as `e2e-diagnostics`. Only a person starts it and no branch rule requires it, so it never blocks a
+merge. GitHub shows the Run button once the workflow is on the default branch, and runs the copy on the branch picked.
+
 The storefront plugin has its own specs (Vitest): `yarn test` in `src/VirtoCommerce.ProductComparison.Web/StorefrontApp`.
 
 ## Documentation
