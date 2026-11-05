@@ -48,7 +48,8 @@ const NOTIFICATION_DURATION = 15000;
 
 const list = shallowRef<CompareListFragment>();
 const lastRemovedItems = shallowRef<CompareListItemType[]>([]);
-const guestListId = useLocalStorage<string | null>(GUEST_LIST_ID_STORAGE_KEY, null);
+// Per store: stores on one origin each have their own guest list.
+const guestListId = useLocalStorage<string | null>(`${GUEST_LIST_ID_STORAGE_KEY}:${globals.storeId}`, null);
 
 let loaded: Promise<void> = Promise.resolve();
 let queue: Promise<unknown> = Promise.resolve();
@@ -276,6 +277,8 @@ function clearRestoreBuffer(): void {
   lastRemovedItems.value = [];
 }
 
+// A refusal (an error with a code) is final, so the guest's id is forgotten then too, and the merge isn't tried on
+// every page load. A request that failed on its way keeps the id: the next page load tries again.
 async function mergeGuestList(secondListId: string): Promise<boolean> {
   try {
     const { data } = await apolloClient.mutate({
@@ -284,10 +287,14 @@ async function mergeGuestList(secondListId: string): Promise<boolean> {
       fetchPolicy: "no-cache",
       context: SUPPRESS_ERROR_NOTIFICATIONS_CONTEXT,
     });
+    guestListId.value = null;
     setList(data?.mergeCompareList);
     return true;
   } catch (error) {
     Logger.error("[product-comparison] merge", error);
+    if (getErrorCode(error)) {
+      guestListId.value = null;
+    }
     return false;
   }
 }
@@ -298,13 +305,8 @@ export function loadCompareList(): Promise<void> {
     const isAuthenticated = useUser().isAuthenticated.value;
     const secondListId = guestListId.value;
 
-    // Forgotten before the call, so a merge the server refuses is not retried on every page load.
-    if (isAuthenticated && secondListId) {
-      guestListId.value = null;
-
-      if (await mergeGuestList(secondListId)) {
-        return;
-      }
+    if (isAuthenticated && secondListId && (await mergeGuestList(secondListId))) {
+      return;
     }
 
     // A guest's list is reachable only from the browser that remembers its id: without one there is nothing to load.
@@ -327,6 +329,11 @@ export function loadCompareList(): Promise<void> {
   }).catch((error) => Logger.error("[product-comparison] load", error));
 
   return loaded;
+}
+
+/** Resolves once the requests sent so far are done: saves, and after a sign-in the guest list's merge. */
+export function whenSettled(): Promise<unknown> {
+  return queue;
 }
 
 /** The configuration a "Customize" link opens the product page with: the item's, if it is the viewer's own. */

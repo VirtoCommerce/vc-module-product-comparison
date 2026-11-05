@@ -3,7 +3,9 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using VirtoCommerce.ProductComparison.Core;
 using VirtoCommerce.ProductComparison.Data.Models;
+using VirtoCommerce.ProductComparison.Xapi;
 using VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure;
 using Xunit;
 using static VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure.CompareListDocuments;
@@ -107,6 +109,25 @@ public class CompareListMergeGraphQlTests
 
         Items(merged).Should().Equal("printer-1@printers#0", "laptop-1@laptops#0");
         Items((await ctx.ExecuteAsBuyerAsync("buyer-1", Query("buyer-1"))).Data("compareList")).Should().Equal("printer-1@printers#0", "laptop-1@laptops#0");
+    }
+
+    [Fact]
+    public async Task Merge_PastTheListCap_IsRefused_AndTheGuestListIsKept()
+    {
+        // The account list is at the 500-product cap (100 categories of 5) and the guest compared a product in a
+        // category of its own: nothing older can make room. The merge is refused with a code the storefront can tell
+        // from a failed request, and neither list changes: the guest's products are not deleted unseen.
+        using var ctx = ProductComparisonTestContext.Create();
+        ctx.Users.Add("buyer-1");
+        var accountProducts = Enumerable.Range(0, ModuleConstants.MaxListItems).Select(i => $"p{i}@category{i / 5}").ToArray();
+        await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", accountProducts));
+        var guestListId = await SaveGuestListAsync(ctx, ProductComparisonTestContext.StoreId, "guest-product@new-category");
+
+        var merged = await ctx.ExecuteAsBuyerAsync("buyer-1", Merge(guestListId));
+
+        merged.ErrorCode.Should().Be(CompareListErrors.FullCode);
+        ItemsCount((await ctx.ExecuteAsBuyerAsync("buyer-1", Query("buyer-1"))).Data("compareList")).Should().Be(ModuleConstants.MaxListItems);
+        Items((await ctx.ExecuteAsGuestAsync(Query(GuestId))).Data("compareList")).Should().Equal("guest-product@new-category#0");
     }
 
     private static string Merge(string secondListId, string userId = "buyer-1")

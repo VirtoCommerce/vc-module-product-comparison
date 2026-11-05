@@ -16,6 +16,8 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.4.0" />
     <!-- Storefront E2E only: the browser that drives the real storefront. -->
     <PackageReference Include="Microsoft.Playwright" Version="1.63.0" />
+    <!-- The in-memory accounts behind UserManager.Users, queried with EF Core's async operators as the cleanup does. -->
+    <PackageReference Include="MockQueryable.EntityFrameworkCore" Version="10.0.12" />
     <!-- Storefront E2E only: the platform's AppManifestService, which answers store.plugins from the module's plugin build. -->
     <PackageReference Include="VirtoCommerce.Platform.Modules" Version="3.1078.0" />
     <!-- Storefront E2E only: the real UserType the storefront's page context selects. -->

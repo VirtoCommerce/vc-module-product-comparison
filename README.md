@@ -13,7 +13,7 @@ a storefront without the module has no product comparison.
 * Compare lists stored on the server: one list per user, store and organization, created by the first product added
 * Guest compare lists kept the way guest carts are, merged into the account list at sign-in or registration
 * Products grouped by category; each category holds up to a per-store number of products (5 by default), and a list
-  holds at most 500 products
+  holds at most 500 products and 1,000 configuration sections in all
 * Configurable products compared with the buyer's chosen configuration; section and option names are read from the
   catalog each time, so they stay current and in the shopper's language
 * Reorder products within a category, clear one category or the whole list
@@ -35,7 +35,8 @@ All fields are on the main schema, `POST /graphql`. A scoped schema with only th
 * a signed-in buyer passes their own user id;
 * a guest passes the anonymous user id the storefront keeps for them and reaches only guest lists; an id that belongs
   to a registered user is refused;
-* an administrator may use any user id.
+* an administrator may use any registered user's id. Guest lists stay the guests': an administrator's save under a
+  guest's id makes a separate list, which the cleanup deletes, since no user has that id.
 
 The organization is never an argument: the list belongs to the organization in the caller's token, so a buyer who
 switches organization sees that organization's list. Locked and expired accounts are refused.
@@ -136,10 +137,10 @@ A refusal is a GraphQL error whose `extensions.code` names the reason:
 | `COMPARE_LIST_DISABLED` | Product comparison is off for the store |
 | `ANONYMOUS_COMPARE_LIST_DISABLED` | A guest saves while guest comparison is off; the storefront asks the guest to sign in |
 | `COMPARE_LIST_LIMIT_REACHED` | The save would put more products into a category than the store's limit; nothing is saved |
-| `COMPARE_LIST_FULL` | The save would put more than 500 products into the list |
+| `COMPARE_LIST_FULL` | The save, or the merge at sign-in, would put more than 500 products, or more than 1,000 configuration sections in all, into the list |
 | `STORE_NOT_FOUND` | No store with the given id |
 | `Unauthorized`, `Forbidden` | The caller may not use the given user id |
-| `VALIDATION` | The input is malformed or too large: an empty or over-long id, a `File` section, text over 255 characters, more than 500 products or item ids in one call, more than 100 configuration sections for a product, or one section chosen twice |
+| `VALIDATION` | The input is malformed or too large: an empty or over-long id, a `File` section, text over 255 characters, more than 500 products or item ids, or more than 1,000 configuration sections, in one call, more than 30 configuration sections for a product, or one section chosen twice |
 
 ## How it works
 
@@ -153,7 +154,10 @@ When a guest signs in, the storefront merges the guest list into the account lis
 
 * per category, the guest's newest products come over first (up to the limit), then the account's newest products
   fill what is left: the incoming products win, as the merge of carts does;
-* a product with the same configuration in both lists keeps the account's item;
+* a product with the same configuration in both lists keeps the account's item, in the account's category: it takes
+  no room in the category the guest compared it in;
+* a merge that would leave more than 500 products, or more than 1,000 configuration sections, in the list is refused
+  with `COMPARE_LIST_FULL`, and both lists stay as they were;
 * the guest list is deleted afterwards. A source that no longer exists, belongs to another store or is the account
   list itself leaves the account list unchanged.
 
@@ -198,13 +202,15 @@ The plugin adds:
 
 * the `/compare` page (route `CompareProducts`): a tab per category, the comparison table with add to cart and
   "Customize", a "no longer available" column with a remove button for an item whose product no longer resolves,
-  clear category, clear all, and Restore right after the list was emptied. The page reloads the list when its browser
-  tab becomes visible again, since another tab or device may have changed it;
+  clear category, clear all, and Restore right after the list was emptied. The page reads the list once the plugin's
+  changes still on their way, such as the sign-in merge, are done, and again whenever its browser tab becomes visible,
+  since another tab or device may have changed it;
 * the compare toggle among a product's action buttons, through the storefront's `productActions` extension point: on
   catalog cards, related products and the product page, where it compares the configurator's current choices;
 * the "Compare" link with a count in the header and the mobile menu, and under My Account > Purchasing;
-* the sign-in merge: the plugin remembers a guest's list id in the browser and merges that list into the account list
-  on the first page load after sign-in;
+* the sign-in merge: the plugin remembers a guest's list id in the browser, per store, and merges that list into the
+  account list on the first page load after sign-in. A merge request that fails on its way is sent again on the next
+  page load; a merge the server refuses is not;
 * "Customize": the product page opened with `?compareItemId=<item id>` preselects that item's configuration, through
   the storefront's `registerProductConfigurationSource`, when the item is in the viewer's own list.
 
@@ -221,10 +227,14 @@ also runs (the configured price) from `/graphql`.
 
 * Two first saves at the same moment, for example from two tabs, can create a second list for a guest or for a user
   without an organization: the unique key doesn't cover an empty organization. Every lookup then uses the oldest list.
+  With an organization the unique key holds, and the second save fails with an error that carries no code.
 * Two changes at the same moment each save the list they read, so one can undo the other: an added product goes
-  missing, or a removed one comes back. Two saves can also put one product more than the limit into a category (the
-  list still shows at most the limit per category), and the same product added twice at once fails once, with an
-  error that carries no code.
+  missing, or a removed one comes back. Two saves can each pass the limit check, so a category can end up over the
+  limit by what the other save added: a product, when the storefront adds one, or a whole batch saved through the API.
+  The 500-product cap can be passed the same way. The list still shows at most the limit per category. The same
+  product added twice at once fails once, with an error that carries no code.
+* The sign-in merge saves the account list, then deletes the guest list in a separate step: a change to the guest list
+  in between, for example from another tab still signed out, is deleted without being merged.
 * Variations deleted together with their main product stay in lists. The catalog deletes them in the database, and
   its product change event names only the main product. They show as no longer available until the buyer removes
   them.

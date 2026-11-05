@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Identity;
@@ -7,11 +8,14 @@ using VirtoCommerce.Platform.Core.Security;
 namespace VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure;
 
 /// <summary>
-/// The store under the harness's <c>UserManager</c>: lookups by id (the guest rule and the account-state check)
-/// and the lockout state (the account-state check). Writes are not the module's business, so they throw.
+/// The store under the harness's <c>UserManager</c>: lookups by id (the guest rule and the account-state check),
+/// the lockout state (the account-state check) and the accounts as a query (the cleanup). Writes are not the
+/// module's business, so they throw.
 /// </summary>
-internal sealed class TestUserStore(TestUsers users) : IUserLockoutStore<ApplicationUser>
+internal sealed class TestUserStore(TestUsers users) : IUserLockoutStore<ApplicationUser>, IQueryableUserStore<ApplicationUser>
 {
+    public IQueryable<ApplicationUser> Users => users.Query();
+
     public Task<ApplicationUser> FindByIdAsync(string userId, CancellationToken cancellationToken)
     {
         return Task.FromResult(users.Find(userId));

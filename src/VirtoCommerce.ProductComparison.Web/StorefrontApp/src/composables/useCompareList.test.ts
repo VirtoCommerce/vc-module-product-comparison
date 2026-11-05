@@ -12,6 +12,9 @@ import { GUEST_LIST_ID_STORAGE_KEY } from "../constants";
 import type { CompareListFragment } from "../api/graphql/types";
 import type { CompareListItemType } from "../types";
 
+// Where the plugin keeps a guest's list id in the store the cases run in.
+const GUEST_LIST_KEY = `${GUEST_LIST_ID_STORAGE_KEY}:B2B-store`;
+
 // The store talks to the server through the host's Apollo client and reads the store settings, the user and the
 // notifications from the facade; each case sets what it needs here.
 const facade = vi.hoisted(() => ({
@@ -108,7 +111,7 @@ async function loadStore(serverList?: CompareListFragment): Promise<StoreModuleT
 
   // A guest with a list is one whose browser saved it, and so remembers its id.
   if (serverList && !facade.isAuthenticated) {
-    localStorage.setItem(GUEST_LIST_ID_STORAGE_KEY, serverList.id);
+    localStorage.setItem(GUEST_LIST_KEY, serverList.id);
   }
 
   const store = await import("./useCompareList");
@@ -143,7 +146,7 @@ describe("loading the list", () => {
 
     await store.useCompareList().add(printer());
 
-    expect(localStorage.getItem(GUEST_LIST_ID_STORAGE_KEY)).toBe("guest-list");
+    expect(localStorage.getItem(GUEST_LIST_KEY)).toBe("guest-list");
   });
 
   // Most guests never compare: a guest's list is reachable only from the browser that remembers its id, so without
@@ -157,12 +160,12 @@ describe("loading the list", () => {
 
   // The cleanup deletes a guest list unchanged for two days: the browser stops asking for it.
   it("forgets a guest list the server no longer has", async () => {
-    localStorage.setItem(GUEST_LIST_ID_STORAGE_KEY, "cleaned-up");
+    localStorage.setItem(GUEST_LIST_KEY, "cleaned-up");
 
     await loadStore();
 
     expect(facade.query).toHaveBeenCalledOnce();
-    expect(localStorage.getItem(GUEST_LIST_ID_STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(GUEST_LIST_KEY)).toBeNull();
   });
 
   it("remembers nothing for a signed-in buyer", async () => {
@@ -170,13 +173,13 @@ describe("loading the list", () => {
 
     await loadStore(list([item()], "account-list"));
 
-    expect(localStorage.getItem(GUEST_LIST_ID_STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(GUEST_LIST_KEY)).toBeNull();
   });
 
   // The host reloads after sign-in, so the first load as the buyer is where the guest's products move over.
   it("merges the remembered guest list after sign-in, then forgets it", async () => {
     facade.isAuthenticated = true;
-    localStorage.setItem(GUEST_LIST_ID_STORAGE_KEY, "guest-list");
+    localStorage.setItem(GUEST_LIST_KEY, "guest-list");
     answerMutations([[MergeCompareListDocument, list([item(), item({ id: "item-2" })], "account-list")]]);
 
     const store = await loadStore();
@@ -188,21 +191,46 @@ describe("loading the list", () => {
     ]);
     expect(facade.query).not.toHaveBeenCalled();
     expect(store.useCompareCount().count.value).toBe(2);
-    expect(localStorage.getItem(GUEST_LIST_ID_STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(GUEST_LIST_KEY)).toBeNull();
   });
 
-  // A merge the server refuses (the guest list belongs to someone else, or is gone) must not repeat on every page
-  // load: the id is forgotten before the call, and the buyer still gets their own list.
-  it("does not retry a failed merge and loads the account's list instead", async () => {
+  // A merge the server refuses (the guest list belongs to someone else, or the account list is full) must not repeat
+  // on every page load: the id is forgotten, and the buyer still gets their own list.
+  it("does not retry a refused merge and loads the account's list instead", async () => {
     facade.isAuthenticated = true;
-    localStorage.setItem(GUEST_LIST_ID_STORAGE_KEY, "guest-list");
+    localStorage.setItem(GUEST_LIST_KEY, "guest-list");
     answerMutations([[MergeCompareListDocument, refusal("Forbidden")]]);
 
     const store = await loadStore(list([item()], "account-list"));
 
     expect(facade.query).toHaveBeenCalledOnce();
     expect(store.useCompareCount().count.value).toBe(1);
-    expect(localStorage.getItem(GUEST_LIST_ID_STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(GUEST_LIST_KEY)).toBeNull();
+  });
+
+  // A request that never got an answer (offline, a gateway error) is not a refusal: forgetting the id then would lose
+  // the guest's products for good, so the next page load merges again.
+  it("keeps the guest list for the next page load when the merge request fails", async () => {
+    facade.isAuthenticated = true;
+    localStorage.setItem(GUEST_LIST_KEY, "guest-list");
+    answerMutations([[MergeCompareListDocument, new Error("Failed to fetch")]]);
+
+    await loadStore(list([item()], "account-list"));
+
+    expect(mutationsOf(MergeCompareListDocument)).toHaveLength(1);
+    expect(localStorage.getItem(GUEST_LIST_KEY)).toBe("guest-list");
+  });
+
+  // Stores on one origin share localStorage: a guest of another store has a list of its own there, which this store's
+  // answers (here, that its guest list is gone) must leave alone.
+  it("keeps each store's guest list apart", async () => {
+    localStorage.setItem(`${GUEST_LIST_ID_STORAGE_KEY}:other-store`, "other-store-list");
+    localStorage.setItem(GUEST_LIST_KEY, "cleaned-up");
+
+    await loadStore();
+
+    expect(localStorage.getItem(GUEST_LIST_KEY)).toBeNull();
+    expect(localStorage.getItem(`${GUEST_LIST_ID_STORAGE_KEY}:other-store`)).toBe("other-store-list");
   });
 });
 
@@ -476,7 +504,7 @@ describe("the configuration source", () => {
     vi.resetModules();
     let answer: (value: unknown) => void = () => {};
     facade.query.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
-    localStorage.setItem(GUEST_LIST_ID_STORAGE_KEY, "list-1");
+    localStorage.setItem(GUEST_LIST_KEY, "list-1");
     const store = await import("./useCompareList");
 
     void store.loadCompareList();

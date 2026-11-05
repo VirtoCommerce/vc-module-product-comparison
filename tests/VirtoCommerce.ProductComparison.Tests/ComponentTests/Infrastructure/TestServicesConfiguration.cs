@@ -18,7 +18,6 @@ using VirtoCommerce.Platform.Core.Events;
 using VirtoCommerce.Platform.Core.GenericCrud;
 using VirtoCommerce.Platform.Core.Modularity;
 using VirtoCommerce.Platform.Core.Security;
-using VirtoCommerce.Platform.Core.Security.Search;
 using VirtoCommerce.Platform.Core.Settings;
 using VirtoCommerce.ProductComparison.Data.Repositories;
 using VirtoCommerce.ProductComparison.Web;
@@ -60,10 +59,9 @@ internal static class TestServicesConfiguration
         services.AddSingleton<TestSettingsManager>();
         services.AddSingleton<ISettingsManager>(sp => sp.GetRequiredService<TestSettingsManager>());
 
-        // A real UserManager over the in-memory accounts: the guest rule and the account-state check call it as
-        // they call the platform's, one manager per call, disposed by the caller.
+        // A real UserManager over the in-memory accounts: the guest rule, the account-state check and the cleanup call
+        // it as they call the platform's, one manager per call, disposed by the caller.
         services.AddSingleton<TestUsers>();
-        services.AddSingleton<IUserSearchService>(sp => sp.GetRequiredService<TestUsers>());
         services.AddSingleton<TestUserStore>();
         services.AddSingleton<Func<UserManager<ApplicationUser>>>(sp => () =>
             new UserManager<ApplicationUser>(sp.GetRequiredService<TestUserStore>(), null, null, null, null, null, null, null, null));

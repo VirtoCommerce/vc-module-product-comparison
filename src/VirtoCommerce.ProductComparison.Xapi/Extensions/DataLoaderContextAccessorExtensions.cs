@@ -69,7 +69,7 @@ public static class DataLoaderContextAccessorExtensions
         IResolveFieldContext<CompareListItemSection> context)
     {
         var aggregate = context.GetValueForSource<CompareListAggregate>();
-        var item = aggregate.List.Items.First(x => x.Sections.Any(section => section.Id == context.Source.Id));
+        var item = aggregate.GetSectionItem(context.Source);
 
         var loader = dataLoader.Context.GetOrAddBatchLoader<(string ProductId, string SectionId), ExpProductConfigurationSection>("compareList_configurationSections", async keys =>
         {

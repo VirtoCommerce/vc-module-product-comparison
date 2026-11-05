@@ -30,8 +30,8 @@ public static class CompareListErrors
         return new ExecutionError($"A category can hold at most {maxItems} compared products") { Code = LimitReachedCode };
     }
 
-    public static ExecutionError Full(int maxListItems)
+    public static ExecutionError Full(int maxListItems, int maxListConfigurationSections)
     {
-        return new ExecutionError($"A compare list can hold at most {maxListItems} products") { Code = FullCode };
+        return new ExecutionError($"A compare list can hold at most {maxListItems} products and {maxListConfigurationSections} configuration sections") { Code = FullCode };
     }
 }

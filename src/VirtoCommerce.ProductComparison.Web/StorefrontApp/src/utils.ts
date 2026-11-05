@@ -44,12 +44,14 @@ function compareOrdinal(a: string, b: string): number {
 }
 
 // The server's configuration key, so a list item and the product page's selection match as the server matches
-// them: sections by id, then id, type, product, quantity and text.
+// them: sections by id, each as its id, type, product, quantity and text. JSON keeps the fields apart whatever a
+// text holds.
 function getConfigurationKey(sections: SectionKeyPartsType[]): string {
-  return [...sections]
-    .sort((a, b) => compareOrdinal(a.sectionId, b.sectionId))
-    .map((x) => [x.sectionId, x.type, x.productId ?? "", x.quantity ?? "", x.customText ?? ""].join("|"))
-    .join("\n");
+  return JSON.stringify(
+    [...sections]
+      .sort((a, b) => compareOrdinal(a.sectionId, b.sectionId))
+      .map((x) => [x.sectionId, x.type, x.productId ?? "", String(x.quantity ?? ""), x.customText ?? ""]),
+  );
 }
 
 export function getItemConfigurationKey(item: CompareListItemType): string {

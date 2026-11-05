@@ -80,6 +80,18 @@ describe("configuration keys", () => {
     expect(getSelectionConfigurationKey(selection)).not.toBe(getItemConfigurationKey(stored));
   });
 
+  // Fields joined with "|" and sections with "\n" read one text section that spells out a second section the same as
+  // the two sections themselves: the product page showed a configuration as compared when only the other one was.
+  it("tell a text that spells out another section from the two sections", () => {
+    const oneSection = [{ sectionId: "s1", type: "Text", customText: "x\ns2|Text|||y" }];
+    const twoSections = [
+      { sectionId: "s1", type: "Text", customText: "x" },
+      { sectionId: "s2", type: "Text", customText: "y" },
+    ];
+
+    expect(getSelectionConfigurationKey(oneSection)).not.toBe(getSelectionConfigurationKey(twoSections));
+  });
+
   // A card passes no selection at all, and the product page passes an empty one for a plain product: both are the
   // plain item, so the button on either shows the same state.
   it("of a plain product equal no selection and an empty one", () => {

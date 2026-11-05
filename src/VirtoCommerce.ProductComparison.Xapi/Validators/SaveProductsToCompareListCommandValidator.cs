@@ -1,3 +1,4 @@
+using System.Linq;
 using FluentValidation;
 using VirtoCommerce.Platform.Core.Common;
 using VirtoCommerce.ProductComparison.Core;
@@ -13,7 +14,9 @@ public class SaveProductsToCompareListCommandValidator : CompareListRequestValid
             .Cascade(CascadeMode.Stop)
             .NotEmpty()
             .Must(products => products.Count <= ModuleConstants.MaxListItems)
-            .WithMessage($"A call can save at most {ModuleConstants.MaxListItems} products");
+            .WithMessage($"A call can save at most {ModuleConstants.MaxListItems} products")
+            .Must(products => products.Sum(x => x.ConfigurationSections?.Count ?? 0) <= ModuleConstants.MaxListConfigurationSections)
+            .WithMessage($"A call can save at most {ModuleConstants.MaxListConfigurationSections} configuration sections");
         RuleForEach(x => x.Products).SetValidator(AbstractTypeFactory<CompareListProductValidator>.TryCreateInstance());
     }
 }

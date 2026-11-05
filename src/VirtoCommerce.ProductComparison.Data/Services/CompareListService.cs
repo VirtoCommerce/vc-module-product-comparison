@@ -51,9 +51,14 @@ public class CompareListService(
 
         if (deletedCount > 0)
         {
-            // The set-based delete bypasses the CrudService pipeline, so expire the cache regions it would have.
-            GenericCachingRegion<CompareList>.ExpireRegion();
-            GenericSearchCachingRegion<CompareList>.ExpireRegion();
+            ClearCacheAfterProductRemoval(productIds);
         }
+    }
+
+    // The set-based delete bypasses the CrudService pipeline and doesn't know which lists it changed: every list goes.
+    protected virtual void ClearCacheAfterProductRemoval(IList<string> productIds)
+    {
+        GenericCachingRegion<CompareList>.ExpireRegion();
+        GenericSearchCachingRegion<CompareList>.ExpireRegion();
     }
 }

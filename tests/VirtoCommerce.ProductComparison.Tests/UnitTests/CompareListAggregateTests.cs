@@ -97,6 +97,20 @@ public class CompareListAggregateTests
     }
 
     [Fact]
+    public void SaveProducts_TextThatSpellsOutAnotherSection_IsAnotherConfiguration()
+    {
+        // A key that joined each section's fields with "|" and the sections with "\n" read this one text section the
+        // same as the two sections below, so the second save was taken for a duplicate and silently dropped.
+        var aggregate = CreateAggregate();
+
+        aggregate.SaveProducts([Product("p1", Printers, TextSection("s1", "x\ns2|Text|||y"))]);
+        aggregate.SaveProducts([Product("p1", Printers, TextSection("s1", "x"), TextSection("s2", "y"))]);
+
+        aggregate.List.Items.Should().HaveCount(2);
+        aggregate.List.Items.Select(x => x.ConfigurationKey).Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
     public void SaveProducts_FullCategory_RefusesTheCall()
     {
         var aggregate = CreateAggregate(maxItems: 2, items: [Item("i1", "p1", Printers, 0), Item("i2", "p2", Printers, 1)]);
@@ -126,6 +140,20 @@ public class CompareListAggregateTests
         var aggregate = CreateAggregate(maxItems: 5, items: items);
 
         var act = () => aggregate.SaveProducts([Product("one-more", "another-category")]);
+
+        act.Should().Throw<ExecutionError>().Which.Code.Should().Be(CompareListErrors.FullCode);
+    }
+
+    [Fact]
+    public void SaveProducts_PastTheListsSectionCap_RefusesWithFull()
+    {
+        // Every configuration section in the list counts toward its cap, so a guest can't store a list's worth of
+        // sections by spreading them over many products. A list at the cap still takes a plain product, not a
+        // configured one.
+        var aggregate = CreateAggregate(items: SectionsAtTheCap());
+
+        aggregate.SaveProducts([Product("plain", "another-category")]);
+        var act = () => aggregate.SaveProducts([Product("configured", "another-category", TextSection("s1", "x"))]);
 
         act.Should().Throw<ExecutionError>().Which.Code.Should().Be(CompareListErrors.FullCode);
     }
@@ -224,6 +252,72 @@ public class CompareListAggregateTests
     }
 
     [Fact]
+    public void Merge_AProductTheAccountComparesInAnotherCategory_TakesNoRoomInTheGuestsCategory()
+    {
+        // A product linked to several categories gets the category the buyer navigated through. The account has P
+        // under laptops; the guest compared P under printers. P keeps the account's item under laptops, so printers
+        // gains nothing and must not lose X or Y to make room for it.
+        var aggregate = CreateAggregate(maxItems: 2, items:
+        [
+            Item("t1", "p", Laptops, 0, minutes: 1),
+            Item("t2", "x", Printers, 0, minutes: 2),
+            Item("t3", "y", Printers, 1, minutes: 3),
+        ]);
+        var source = CreateList(isAnonymous: true, Item("s1", "p", Printers, 0, minutes: 10));
+
+        aggregate.Merge(source);
+
+        aggregate.List.Items.Select(x => (x.Id, x.CategoryId)).Should().BeEquivalentTo(
+        [
+            ("t1", Laptops),
+            ("t2", Printers),
+            ("t3", Printers),
+        ]);
+    }
+
+    [Fact]
+    public void Merge_IntoAFullList_StillMakesRoomInTheGuestsCategory()
+    {
+        // At the 500-product cap a new guest product used to be skipped before its category made room, and the guest
+        // list was deleted after: the product was lost. Its category's oldest product makes room instead, and the
+        // list stays at the cap.
+        var aggregate = CreateAggregate(maxItems: 5, items: FullList());
+        var source = CreateList(isAnonymous: true, Item("s1", "guest-product", "category0", 0, minutes: 10));
+
+        aggregate.Merge(source);
+
+        aggregate.List.Items.Should().HaveCount(ModuleConstants.MaxListItems);
+        aggregate.List.Items.Where(x => x.CategoryId == "category0").Select(x => x.ProductId).Should().BeEquivalentTo(
+            "p0-1", "p0-2", "p0-3", "p0-4", "guest-product");
+    }
+
+    [Fact]
+    public void Merge_PastTheListCap_IsRefusedWithFull()
+    {
+        // A guest product in a category of its own has no older product to replace: taking it would put 501 products
+        // in the list. The merge is refused, so the handler neither saves nor deletes the guest list.
+        var aggregate = CreateAggregate(maxItems: 5, items: FullList());
+        var source = CreateList(isAnonymous: true, Item("s1", "guest-product", "new-category", 0, minutes: 10));
+
+        var act = () => aggregate.Merge(source);
+
+        act.Should().Throw<ExecutionError>().Which.Code.Should().Be(CompareListErrors.FullCode);
+    }
+
+    [Fact]
+    public void Merge_PastTheListsSectionCap_IsRefusedWithFull()
+    {
+        // The guest's configured product would take the account list past its configuration sections cap: refused like
+        // a merge past the product cap, so the guest list is kept.
+        var aggregate = CreateAggregate(items: SectionsAtTheCap());
+        var source = CreateList(isAnonymous: true, ConfiguredItem("s1", "guest-product", "new-category", sections: 1));
+
+        var act = () => aggregate.Merge(source);
+
+        act.Should().Throw<ExecutionError>().Which.Code.Should().Be(CompareListErrors.FullCode);
+    }
+
+    [Fact]
     public void Merge_TakesTheSourcesNewestMaxItemsPerCategory()
     {
         var aggregate = CreateAggregate(maxItems: 2);
@@ -253,6 +347,21 @@ public class CompareListAggregateTests
         item.ConfigurationKey.Should().Be("key");
         item.Sections.Should().ContainSingle().Which.Id.Should().BeNull();
         sourceItem.Sections[0].Id.Should().Be("section-id");
+    }
+
+    [Fact]
+    public void GetSectionItem_FindsTheItemEachSectionBelongsTo()
+    {
+        // Two configurations of one product choose in the same section: each section still resolves its own item, the
+        // one whose product the catalog's section names and options come from.
+        var red = Item("i1", "p1", Printers, 0);
+        red.Sections = [new CompareListItemSection { Id = "a", SectionId = "color", Type = "Product", ProductId = "red" }];
+        var blue = Item("i2", "p1", Printers, 1);
+        blue.Sections = [new CompareListItemSection { Id = "b", SectionId = "color", Type = "Product", ProductId = "blue" }];
+        var aggregate = CreateAggregate(items: [red, blue]);
+
+        aggregate.GetSectionItem(blue.Sections[0]).Should().BeSameAs(blue);
+        aggregate.GetSectionItem(red.Sections[0]).Should().BeSameAs(red);
     }
 
     [Fact]
@@ -301,6 +410,33 @@ public class CompareListAggregateTests
             IsAnonymous = isAnonymous,
             Items = items.ToList(),
         };
+    }
+
+    // ModuleConstants.MaxListItems products, five in each of 100 categories: "p{category}-{n}", the oldest n = 0.
+    private static CompareListItem[] FullList()
+    {
+        return Enumerable.Range(0, ModuleConstants.MaxListItems)
+            .Select(i => Item($"i{i}", $"p{i / 5}-{i % 5}", $"category{i / 5}", position: i % 5, minutes: i % 5))
+            .ToArray();
+    }
+
+    // ModuleConstants.MaxListConfigurationSections configuration sections, ten to a product, each product in a category
+    // of its own.
+    private static CompareListItem[] SectionsAtTheCap()
+    {
+        return Enumerable.Range(0, ModuleConstants.MaxListConfigurationSections / 10)
+            .Select(i => ConfiguredItem($"i{i}", $"p{i}", $"category{i}", sections: 10))
+            .ToArray();
+    }
+
+    private static CompareListItem ConfiguredItem(string id, string productId, string categoryId, int sections)
+    {
+        var item = Item(id, productId, categoryId, position: 0);
+        item.Sections = Enumerable.Range(0, sections)
+            .Select(i => new CompareListItemSection { SectionId = $"s{i}", Type = "Text", CustomText = "x" })
+            .ToList();
+
+        return item;
     }
 
     private static CompareListItem Item(string id, string productId, string categoryId, int position, int minutes = 0)

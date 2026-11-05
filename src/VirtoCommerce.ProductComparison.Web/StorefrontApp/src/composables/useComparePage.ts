@@ -29,6 +29,7 @@ import {
   SKU_ROW_KEY,
 } from "../constants";
 import { getCategoryKey, getDisplayPrice, toConfigurationSectionInputs } from "../utils";
+import { whenSettled } from "./useCompareList";
 import type { CompareProductFragment } from "../api/graphql/types";
 import type { StorefrontMoneyFragment } from "../api/graphql/storefront/types";
 import type {
@@ -126,10 +127,17 @@ export function useComparePage() {
   const customerRatingEnabled = useModuleSettings(CUSTOMER_REVIEWS_MODULE_ID).isEnabled(CUSTOMER_REVIEWS_ENABLED_KEY);
   const { storeId, userId, cultureName, currencyCode } = globals;
 
+  // A save or the sign-in merge still on its way would leave the page on the list before it, while the header
+  // already counts the new one: the page asks once they are done.
+  const settled = ref(false);
+  void whenSettled().then(() => {
+    settled.value = true;
+  });
+
   const { result, loading, error, refetch } = useQuery(
     CompareProductsDocument,
     { storeId, userId, cultureName, currencyCode },
-    { fetchPolicy: "no-cache", context: SUPPRESS_ERROR_NOTIFICATIONS_CONTEXT },
+    () => ({ fetchPolicy: "no-cache", context: SUPPRESS_ERROR_NOTIFICATIONS_CONTEXT, enabled: settled.value }),
   );
 
   const categories = computed(() => result.value?.compareList?.categories ?? []);

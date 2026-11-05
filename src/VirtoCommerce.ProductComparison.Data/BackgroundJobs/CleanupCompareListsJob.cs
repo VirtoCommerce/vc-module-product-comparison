@@ -2,12 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using VirtoCommerce.CustomerModule.Core.Model;
 using VirtoCommerce.CustomerModule.Core.Services;
 using VirtoCommerce.Platform.Core.Common;
 using VirtoCommerce.Platform.Core.Security;
-using VirtoCommerce.Platform.Core.Security.Search;
 using VirtoCommerce.Platform.Core.Settings;
 using VirtoCommerce.ProductComparison.Core;
 using VirtoCommerce.ProductComparison.Core.Models;
@@ -21,7 +22,7 @@ public class CleanupCompareListsJob(
     Func<IProductComparisonRepository> repositoryFactory,
     ICompareListService compareListService,
     ICompareListSearchService compareListSearchService,
-    IUserSearchService userSearchService,
+    Func<UserManager<ApplicationUser>> userManagerFactory,
     IMemberService memberService,
     ISettingsManager settingsManager,
     ILogger<CleanupCompareListsJob> logger)
@@ -100,16 +101,20 @@ public class CleanupCompareListsJob(
     {
         var userIds = lists.Select(x => x.UserId).Distinct().ToList();
 
-        var userCriteria = AbstractTypeFactory<UserSearchCriteria>.TryCreateInstance();
-        userCriteria.ObjectIds = userIds;
-        userCriteria.Take = userIds.Count;
-        var users = (await userSearchService.SearchUsersAsync(userCriteria)).Results;
+        // Only the id and contact: the platform's user search would also load each user's roles, one query per user.
+        Dictionary<string, string> memberIdsByUserId;
+        using (var userManager = userManagerFactory())
+        {
+            memberIdsByUserId = await userManager.Users
+                .Where(x => userIds.Contains(x.Id))
+                .Select(x => new { x.Id, x.MemberId })
+                .ToDictionaryAsync(x => x.Id, x => x.MemberId);
+        }
 
-        var memberIds = users.Select(x => x.MemberId).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToArray();
+        var memberIds = memberIdsByUserId.Values.Where(x => !string.IsNullOrEmpty(x)).Distinct().ToArray();
         // Organizations come with any response group; the rest of a member isn't needed here.
         var members = memberIds.Length > 0 ? await memberService.GetByIdsAsync(memberIds, MemberResponseGroup.Default.ToString()) : [];
 
-        var memberIdsByUserId = users.ToDictionary(x => x.Id, x => x.MemberId);
         var organizationIdsByMemberId = members.ToDictionary(x => x.Id, GetOrganizationIds);
 
         return lists

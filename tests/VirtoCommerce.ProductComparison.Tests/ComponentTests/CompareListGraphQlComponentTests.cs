@@ -188,22 +188,28 @@ public class CompareListGraphQlComponentTests
     [Fact]
     public async Task OversizedInput_IsRefusedBeforeAnythingIsStored()
     {
-        // A guest reaches these mutations without signing in, so what one call may carry is capped: no more products
-        // or item ids than a list can hold, and a bounded number of configuration sections, each chosen once. A
-        // refused call builds and stores nothing.
+        // A guest reaches these mutations without signing in, so what one call may carry is capped: no more products,
+        // item ids or configuration sections in all than a list can hold, and a bounded number of sections for a
+        // product, each chosen once. A refused call builds and stores nothing. The call with too many sections in all
+        // has none too many for any one product: the cap on the whole call refuses it, before the list is even loaded.
         using var ctx = ProductComparisonTestContext.Create();
         var tooManyProducts = string.Join(" ", Enumerable.Range(0, ModuleConstants.MaxListItems + 1).Select(i => $$"""{ productId: "product-{{i}}" }"""));
         var tooManySections = string.Join(" ", Enumerable.Range(0, ModuleConstants.MaxConfigurationSections + 1).Select(i => $$"""{ sectionId: "section-{{i}}" type: "Text" customText: "text" }"""));
+        var fullConfiguration = string.Join(" ", Enumerable.Range(0, ModuleConstants.MaxConfigurationSections).Select(i => $$"""{ sectionId: "section-{{i}}" type: "Text" customText: "text" }"""));
+        var tooManySectionsInAll = string.Join(" ", Enumerable.Range(0, (ModuleConstants.MaxListConfigurationSections / ModuleConstants.MaxConfigurationSections) + 1)
+            .Select(i => $$"""{ productId: "printer-{{i}}" configurationSections: [{{fullConfiguration}}] }"""));
         const string sameSectionTwice = """{ sectionId: "engraving" type: "Text" customText: "One" } { sectionId: "ENGRAVING" type: "Text" customText: "Two" }""";
         var tooManyItemIds = string.Join(" ", Enumerable.Range(0, ModuleConstants.MaxListItems + 1).Select(i => $"\"item-{i}\""));
 
         var productsResponse = await ctx.ExecuteAsGuestAsync(Mutation("saveProductsToCompareList", GuestId, $"products: [{tooManyProducts}]"));
         var sectionsResponse = await ctx.ExecuteAsGuestAsync(Mutation("saveProductsToCompareList", GuestId, $$"""products: [{ productId: "printer-1" configurationSections: [{{tooManySections}}] }]"""));
+        var sectionsInAllResponse = await ctx.ExecuteAsGuestAsync(Mutation("saveProductsToCompareList", GuestId, $"products: [{tooManySectionsInAll}]"));
         var sameSectionResponse = await ctx.ExecuteAsGuestAsync(Mutation("saveProductsToCompareList", GuestId, $$"""products: [{ productId: "printer-1" configurationSections: [{{sameSectionTwice}}] }]"""));
         var itemIdsResponse = await ctx.ExecuteAsGuestAsync(Mutation("removeCompareListItems", GuestId, $"itemIds: [{tooManyItemIds}]"));
 
         productsResponse.ErrorCode.Should().Be("VALIDATION");
         sectionsResponse.ErrorCode.Should().Be("VALIDATION");
+        sectionsInAllResponse.ErrorCode.Should().Be("VALIDATION", "the list's own cap would answer COMPARE_LIST_FULL, after loading it");
         sameSectionResponse.ErrorCode.Should().Be("VALIDATION", "a section holds one choice, whatever the case of its id");
         itemIdsResponse.ErrorCode.Should().Be("VALIDATION");
         await using var db = ctx.NewDbContext();

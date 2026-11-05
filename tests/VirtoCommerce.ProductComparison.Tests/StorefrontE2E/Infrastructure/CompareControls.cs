@@ -12,8 +12,8 @@ internal static class CompareControls
     /// <summary>The plugin's page.</summary>
     public const string ComparePage = "/compare";
 
-    /// <summary>Where the plugin remembers a guest's list for the merge after sign-in.</summary>
-    public const string GuestListIdKey = "vc-product-comparison:guest-list-id";
+    /// <summary>Where the plugin remembers a guest's list in the test store, for the merge after sign-in.</summary>
+    public const string GuestListIdKey = $"vc-product-comparison:guest-list-id:{InProcessBackend.StoreId}";
 
     /// <summary>The product page's price block, in the page's sidebar: its action row holds the compare toggle.</summary>
     public static ILocator PriceBlock(IPage page) => page.GetByRole(AriaRole.Complementary, new() { Name = "Sidebar" });

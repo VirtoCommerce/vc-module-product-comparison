@@ -173,7 +173,8 @@ public class CleanupCompareListsJobComponentTests
         await ctx.CleanupJob.Process();
 
         (await RemainingListIdsAsync(ctx)).Should().BeEquivalentTo(lists.Where((_, i) => i % 3 != 0).Select(x => x.Id));
-        ctx.Users.Searches.Should().OnlyContain(x => x.Count > 0 && x.Count <= BatchSize, "the users are looked up a page of lists at a time");
+        // 1,200 lists come in pages of 500, 500 and 200: one lookup of their users each, not one per user or one for all.
+        ctx.Users.Queries.Should().Be(3, "the users are looked up a page of lists at a time");
     }
 
     private static async Task<IList<string>> RemainingListIdsAsync(ProductComparisonTestContext ctx)

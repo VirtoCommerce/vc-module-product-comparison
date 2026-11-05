@@ -10,14 +10,22 @@ import type { CompareCategoryType, ComparePageItemType } from "../types";
 // The page's one query, as the server returns it, and the facade calls the page makes around it.
 const page = vi.hoisted(() => ({
   result: undefined as unknown as { value: CompareProductsQuery | undefined },
+  queryOptions: undefined as unknown as () => { enabled?: boolean },
+  settled: Promise.resolve() as Promise<unknown>,
   query: { category: undefined as string | undefined },
   mutate: vi.fn(),
   analytics: vi.fn(),
 }));
 
 vi.mock("@vue/apollo-composable", () => ({
-  useQuery: () => ({ result: page.result, loading: ref(false), error: ref(null), refetch: vi.fn() }),
+  useQuery: (_document: unknown, _variables: unknown, options: () => { enabled?: boolean }) => {
+    page.queryOptions = options;
+    return { result: page.result, loading: ref(false), error: ref(null), refetch: vi.fn() };
+  },
 }));
+
+// The list store's requests in flight when the page opens: settled unless a case holds them.
+vi.mock("./useCompareList", () => ({ whenSettled: () => page.settled }));
 
 vi.mock("vue-router", () => ({ useRoute: () => ({ query: page.query }) }));
 
@@ -89,7 +97,28 @@ function runPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   page.query = { category: undefined };
+  page.settled = Promise.resolve();
   page.mutate.mockResolvedValue({ data: { createConfiguredLineItem: undefined } });
+});
+
+// The header counts a save or the sign-in merge as soon as it lands; a page that read the list while it was still on
+// its way would show the list from before, and nothing would read it again.
+describe("opening the page", () => {
+  it("asks for the list only once the store's requests are done", async () => {
+    let settle!: () => void;
+    page.settled = new Promise<void>((resolve) => (settle = resolve));
+    setCategories([]);
+
+    runPage();
+    await flushPromises();
+
+    expect(page.queryOptions().enabled).toBe(false);
+
+    settle();
+    await flushPromises();
+
+    expect(page.queryOptions().enabled).toBe(true);
+  });
 });
 
 describe("category tabs", () => {

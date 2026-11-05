@@ -12,6 +12,8 @@ namespace VirtoCommerce.ProductComparison.Xapi.Aggregates;
 
 public class CompareListAggregate
 {
+    private Dictionary<CompareListItemSection, CompareListItem> _itemsBySection;
+
     public CompareList List { get; set; }
 
     public Store Store { get; set; }
@@ -47,6 +49,16 @@ public class CompareListAggregate
     public virtual IList<CompareListItem> GetVisibleItems()
     {
         return GetCategories().SelectMany(x => x.Items).ToList();
+    }
+
+    // Built once per read: every configuration section of the list looks its item up here.
+    public virtual CompareListItem GetSectionItem(CompareListItemSection section)
+    {
+        _itemsBySection ??= List.Items
+            .SelectMany(item => item.Sections, (item, itemSection) => (Item: item, Section: itemSection))
+            .ToDictionary(x => x.Section, x => x.Item, (IEqualityComparer<CompareListItemSection>)ReferenceEqualityComparer.Instance);
+
+        return _itemsBySection[section];
     }
 
     public virtual bool IsAvailable => IsEnabled && (!List.IsAnonymous || IsAnonymousListEnabled);
@@ -85,10 +97,7 @@ public class CompareListAggregate
             throw CompareListErrors.LimitReached(MaxItems);
         }
 
-        if (List.Items.Count > ModuleConstants.MaxListItems)
-        {
-            throw CompareListErrors.Full(ModuleConstants.MaxListItems);
-        }
+        EnsureNotFull();
     }
 
     public virtual void RemoveItems(IList<string> itemIds)
@@ -124,7 +133,8 @@ public class CompareListAggregate
     }
 
     // Incoming items win at the limit (AC 1.3.5): per category, the source's newest MaxItems come over, then the
-    // target's newest items fill what is left. A product with the same configuration keeps the target's item.
+    // target's newest items fill what is left. A product with the same configuration keeps the target's item, which
+    // takes room only in its own category. A list that would still be over its caps refuses the merge.
     public virtual void Merge(CompareList source)
     {
         foreach (var group in source.Items.GroupBy(x => GetCategoryKey(x.CategoryId), StringComparer.OrdinalIgnoreCase))
@@ -135,25 +145,36 @@ public class CompareListAggregate
                 .OrderBy(x => x.Position)
                 .ToList();
 
-            var mergedItems = new List<CompareListItem>();
+            var keptItems = new List<CompareListItem>();
 
             foreach (var sourceItem in incomingItems)
             {
                 var item = FindItem(sourceItem.ProductId, sourceItem.ConfigurationKey);
 
-                if (item == null && List.Items.Count < ModuleConstants.MaxListItems)
+                if (item == null)
                 {
                     item = CopyItem(sourceItem);
                     List.Items.Add(item);
                 }
 
-                if (item != null)
+                if (GetCategoryKey(item.CategoryId).EqualsIgnoreCase(group.Key))
                 {
-                    mergedItems.Add(item);
+                    keptItems.Add(item);
                 }
             }
 
-            TrimCategory(group.Key, mergedItems);
+            TrimCategory(group.Key, keptItems);
+        }
+
+        EnsureNotFull();
+    }
+
+    protected virtual void EnsureNotFull()
+    {
+        if (List.Items.Count > ModuleConstants.MaxListItems
+            || List.Items.Sum(x => x.Sections.Count) > ModuleConstants.MaxListConfigurationSections)
+        {
+            throw CompareListErrors.Full(ModuleConstants.MaxListItems, ModuleConstants.MaxListConfigurationSections);
         }
     }
 
@@ -228,7 +249,7 @@ public class CompareListAggregate
         return List.Items.Where(x => GetCategoryKey(x.CategoryId).EqualsIgnoreCase(categoryKey)).ToList();
     }
 
-    protected static string GetCategoryKey(string categoryId)
+    protected virtual string GetCategoryKey(string categoryId)
     {
         return categoryId ?? string.Empty;
     }
