@@ -52,6 +52,7 @@ public abstract class StorefrontEnvironment : IAsyncLifetime
 
         ConfigureStore(_backend.Context);
         E2ECatalog.Seed(_backend.Catalog);
+        await SeedAsync(_backend.Catalog);
         Log("seeded");
 
         if (storefront.BuildDirectory != null)
@@ -85,6 +86,9 @@ public abstract class StorefrontEnvironment : IAsyncLifetime
     {
     }
 
+    /// <summary>The group's own data, after the shared catalog and before the first page opens: products, lists.</summary>
+    private protected virtual Task SeedAsync(StorefrontCatalog catalog) => Task.CompletedTask;
+
     /// <summary>
     /// Test-side work against the harness, between requests: the page may still be fetching, and the in-memory database
     /// takes one caller at a time.
@@ -117,6 +121,17 @@ public abstract class StorefrontEnvironment : IAsyncLifetime
         => RunExclusiveAsync(async context =>
         {
             var list = (await context.ExecuteAsGuestAsync(CompareListDocuments.SaveProducts(guestId, products))).Data("saveProductsToCompareList");
+            return list.GetProperty("id").GetString();
+        });
+
+    /// <summary>
+    /// Saves products to a buyer's compare list through the same mutation, as the signed-in buyer, between requests: for
+    /// a test that starts from the buyer's list. Each product is "productId@categoryId".
+    /// </summary>
+    internal Task<string> SaveAsBuyerAsync(string userId, params string[] products)
+        => RunExclusiveAsync(async context =>
+        {
+            var list = (await context.ExecuteAsBuyerAsync(userId, CompareListDocuments.SaveProducts(userId, products))).Data("saveProductsToCompareList");
             return list.GetProperty("id").GetString();
         });
 

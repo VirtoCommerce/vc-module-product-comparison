@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using FluentAssertions;
 using VirtoCommerce.ProductComparison.Tests.StorefrontE2E.Infrastructure;
@@ -156,6 +157,81 @@ public sealed class GuestCompareTests(GuestCompareEnvironment env)
             (LaserJet100Id, LaserPrintersId),
             (LaserJet200Id, LaserPrintersId),
             (CopyPaperA4Id, CopyPaperId),
+        ]);
+    }
+
+    /// <summary>
+    /// Deep test C5.6: "Clear category" asks for confirmation, naming the category and its count, then empties that
+    /// category alone, through the plugin's own clearCompareListCategory: the one compare-list operation of the plugin
+    /// that no other E2E test sends, so its document meets the server's schema only here. The page moves to the category
+    /// that is left and offers no "Restore products", which only a clear that empties the list offers.
+    /// </summary>
+    [Fact(Timeout = 300_000)]
+    public async Task ClearCategory_EmptiesThatCategoryAlone()
+    {
+        var guestId = StorefrontEnvironment.NewGuestId();
+        await env.SaveAsGuestAsync(guestId, $"{LaserJet100Id}@{LaserPrintersId}", $"{LaserJet200Id}@{LaserPrintersId}", $"{CopyPaperA4Id}@{CopyPaperId}");
+
+        await using var session = await env.OpenAsGuestAsync(guestId, ComparePage);
+
+        await session.RunAsync(nameof(ClearCategory_EmptiesThatCategoryAlone), async page =>
+        {
+            // The page opens on the category added first.
+            await Expect(CategoryTab(page, LaserPrintersName, 2)).ToHaveAttributeAsync("aria-pressed", "true", new() { Timeout = 60_000 });
+
+            await ClearCategory(page).ClickAsync();
+            var dialog = Dialog(page, "Clear category");
+            await Expect(dialog).ToContainTextAsync("All 2 products in Laser printers will be removed from comparison.");
+            await OkButton(dialog).ClickAsync();
+
+            // The category is gone; the other one shows, with its product, and is all the header counts.
+            await Expect(CategoryTab(page, LaserPrintersName)).ToHaveCountAsync(0);
+            await Expect(CategoryTab(page, CopyPaperName, 1)).ToBeVisibleAsync();
+            await Expect(ProductColumn(page, CopyPaperA4Name)).ToBeVisibleAsync();
+            await Expect(HeaderCompareLink(page, 1)).ToBeVisibleAsync();
+            await Expect(RestoreProducts(page)).ToHaveCountAsync(0);
+
+            session.Operations.Where(x => x == "ClearCompareListCategory").Should().ContainSingle();
+            session.Operations.Should().NotContain("ClearCompareList");
+            session.GraphQlErrors.Should().BeEmpty();
+        });
+
+        (await env.GetListsAsync(guestId)).Should().ContainSingle().Which.Items.Select(x => (x.ProductId, x.CategoryId))
+            .Should().Equal((CopyPaperA4Id, CopyPaperId));
+    }
+
+    /// <summary>
+    /// Deep test C2.2 and C8.1: the toast an add shows has a "Compare" link (the host's toast renders the plugin's button
+    /// with its route) to the compare page on the product's category, named in the URL, and the page opens on that
+    /// category's tab rather than on the category added first. The plugin's specs cover each side alone.
+    /// </summary>
+    [Fact(Timeout = 300_000)]
+    public async Task TheToastsCompareLink_OpensThePageOnTheProductsCategory()
+    {
+        // Copy paper first: a page whose URL names no category would open on it.
+        var guestId = StorefrontEnvironment.NewGuestId();
+        await env.SaveAsGuestAsync(guestId, $"{CopyPaperA4Id}@{CopyPaperId}");
+
+        await using var session = await env.OpenAsGuestAsync(guestId, ProductPage(LaserJet100Id));
+
+        await session.RunAsync(nameof(TheToastsCompareLink_OpensThePageOnTheProductsCategory), async page =>
+        {
+            await AddToCompare(page).ClickAsync(new() { Timeout = 60_000 });
+            await ToastCompareLink(page).ClickAsync();
+
+            await Expect(page).ToHaveURLAsync(new Regex($@"{Regex.Escape(ComparePage)}\?category={Regex.Escape(LaserPrintersId)}$"));
+            await Expect(CategoryTab(page, LaserPrintersName, 1)).ToHaveAttributeAsync("aria-pressed", "true");
+            await Expect(CategoryTab(page, CopyPaperName, 1)).ToHaveAttributeAsync("aria-pressed", "false");
+            await Expect(ProductColumn(page, LaserJet100Name)).ToBeVisibleAsync();
+            await Expect(HeaderCompareLink(page, 2)).ToBeVisibleAsync();
+
+            session.GraphQlErrors.Should().BeEmpty();
+        });
+
+        (await env.GetListsAsync(guestId)).Should().ContainSingle().Which.Items.Select(x => (x.ProductId, x.CategoryId)).Should().BeEquivalentTo(
+        [
+            (CopyPaperA4Id, CopyPaperId),
+            (LaserJet100Id, LaserPrintersId),
         ]);
     }
 }

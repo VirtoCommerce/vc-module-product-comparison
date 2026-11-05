@@ -321,7 +321,7 @@ Unique keys: (`UserId`, `StoreId`, `OrganizationId`) on `CompareList`, and (`Com
 |----------|-----------|---------|
 | `Unit` | The list rules (limits, duplicates, merge, reorder) and the access rules, in isolation. | None. |
 | `Component` | The module's real services, repository, job, event handler and GraphQL schema, called in process. | In-memory SQLite created with `EnsureCreated`, and hand-written doubles for the platform parts the module only reads. |
-| `StorefrontE2E` | The real storefront with the module's compare plugin, driven by Playwright: a guest adds, compares and removes a product; the sign-in warning when guest lists are off; the sign-in merge; a product that is no longer available; a store with compare off; clear all and restore. | The component harness, hosted on Kestrel inside the test process, with the catalog's product queries answered from memory. |
+| `StorefrontE2E` | The real storefront with the module's compare plugin, driven by Playwright: a guest adds, compares and removes a product; the add's toast opens the page on the product's category; the sign-in warning when guest lists are off; the sign-in merge, a merge that fails on its way and one refused at the cap; a product that is no longer available; a store with compare off; clearing a category, clear all and restore. Also the compare page's layout at QA's 19 widths, as tests of `Kind=Layout`. | The component harness, hosted on Kestrel inside the test process, with the catalog's product queries answered from memory. |
 
 `dotnet test` runs all three. The end-to-end tests also carry the `IntegrationTest` category, which `vc-build Test`,
 and so the module CI, leaves out by default: the CI runner has no storefront. They need a vc-frontend clone (with

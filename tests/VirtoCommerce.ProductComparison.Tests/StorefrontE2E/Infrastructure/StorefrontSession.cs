@@ -95,6 +95,20 @@ internal sealed class StorefrontSession : IAsyncDisposable
     public Task<string> GetLocalStorageAsync(string key)
         => Page.EvaluateAsync<string>("key => localStorage.getItem(key)", key);
 
+    /// <summary>
+    /// The GraphQL errors recorded once there are at least <paramref name="count"/>, or after 10 seconds: a response's
+    /// body is read after the page got it, so an error the page already showed may not be recorded yet.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> WaitForGraphQlErrorsAsync(int count)
+    {
+        for (var waited = 0; GraphQlErrors.Count < count && waited < 10_000; waited += 50)
+        {
+            await Task.Delay(50);
+        }
+
+        return GraphQlErrors;
+    }
+
     private void Attach(IPage page)
     {
         Page = page;
@@ -180,7 +194,8 @@ internal sealed class StorefrontSession : IAsyncDisposable
 
     private static bool IsGraphQl(IRequest request) => request.Url.Contains("/graphql") && request.Method == "POST";
 
-    private static string GetOperationName(IRequest request)
+    /// <summary>The GraphQL operation a request sends, from its JSON body; "?" for a body without one.</summary>
+    internal static string GetOperationName(IRequest request)
     {
         try
         {

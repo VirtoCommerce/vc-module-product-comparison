@@ -14,7 +14,13 @@ const store = vi.hoisted(() => ({
   reload: vi.fn(),
 }));
 
-const page = vi.hoisted(() => ({ refetch: vi.fn(), isEmpty: false, totalCount: 2 }));
+const page = vi.hoisted(() => ({
+  refetch: vi.fn(),
+  isEmpty: false,
+  totalCount: 2,
+  failed: false,
+  columns: [{ item: { id: "item-1" } }] as { item: { id: string } }[],
+}));
 const modal = vi.hoisted(() => ({ openModal: vi.fn(), closeModal: vi.fn() }));
 
 vi.mock("../composables/useCompareList", async () => {
@@ -29,7 +35,7 @@ vi.mock("../composables/useComparePage", async () => {
   return {
     useComparePage: () => ({
       loading: ref(false),
-      failed: ref(false),
+      failed: computed(() => page.failed),
       isEmpty: computed(() => page.isEmpty),
       totalCount: computed(() => page.totalCount),
       categoryTabs: ref([{ key: "printers", label: "Printers", count: 2 }]),
@@ -37,7 +43,7 @@ vi.mock("../composables/useComparePage", async () => {
       selectedCategoryKey: ref("printers"),
       selectedCategoryLabel: ref("Printers"),
       selectedCategoryCount: ref(2),
-      columns: ref([{ item: { id: "item-1" } }]),
+      columns: computed(() => page.columns),
       tableRows: ref([]),
       refetch: page.refetch,
       selectCategory: vi.fn(),
@@ -95,6 +101,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   page.isEmpty = false;
   page.totalCount = 2;
+  page.failed = false;
+  page.columns = [{ item: { id: "item-1" } }];
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
   setVisibility("visible");
 });
@@ -120,6 +128,39 @@ describe("coming back to the page's tab", () => {
 
     expect(store.reload).toHaveBeenCalledOnce();
     expect(page.refetch).toHaveBeenCalledOnce();
+
+    wrapper.unmount();
+  });
+});
+
+// Deep test C5.9, which the dev server can't reach: a list that failed to load and left nothing on screen shows the
+// error state, whose "Try again" asks again. A refetch that fails once the columns are there keeps them on screen:
+// the buyer goes on comparing what they see.
+describe("a failed load", () => {
+  it("shows the error state, whose Try again asks again, when nothing has loaded", async () => {
+    page.failed = true;
+    page.columns = [];
+    const wrapper = createWrapper();
+
+    const errorState = wrapper.get('[data-test-id="compare-error-state"]');
+    expect(errorState.get("[text]").attributes("text")).toContain("product_comparison.page.error");
+
+    const retryButton = errorState
+      .findAll("button")
+      .find((button) => button.text().includes("product_comparison.page.retry"));
+    await retryButton!.trigger("click");
+
+    expect(page.refetch).toHaveBeenCalledOnce();
+
+    wrapper.unmount();
+  });
+
+  it("keeps the table when a refetch fails after the columns have loaded", () => {
+    page.failed = true;
+    const wrapper = createWrapper();
+
+    expect(wrapper.find('[data-test-id="compare-error-state"]').exists()).toBe(false);
+    expect(wrapper.findComponent({ name: "CompareTable" }).exists()).toBe(true);
 
     wrapper.unmount();
   });

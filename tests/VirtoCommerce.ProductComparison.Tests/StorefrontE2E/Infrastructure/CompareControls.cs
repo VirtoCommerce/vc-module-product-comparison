@@ -39,11 +39,21 @@ internal static class CompareControls
     /// <summary>The storefront's toasts.</summary>
     public static ILocator Toasts(IPage page) => page.GetByRole(AriaRole.Region, new() { Name = "Notifications" });
 
+    /// <summary>The "Compare" link of the toast an add shows: the host renders the plugin's button, with its route, as a link.</summary>
+    public static ILocator ToastCompareLink(IPage page) => Toasts(page).GetByRole(AriaRole.Link, new() { Name = "Compare", Exact = true });
+
     public static ILocator CompareTitle(IPage page) => page.GetByRole(AriaRole.Heading, new() { Level = 1, Name = "Compare products", Exact = true });
 
     /// <summary>A category tab of the compare page: the category's name and its count.</summary>
     public static ILocator CategoryTab(IPage page, string name, int count)
         => page.GetByRole(AriaRole.Button, new() { NameRegex = new Regex($@"^{Regex.Escape(name)}\s*{count}$") });
+
+    /// <summary>A category tab of the compare page, whatever its count.</summary>
+    public static ILocator CategoryTab(IPage page, string name)
+        => page.GetByRole(AriaRole.Button, new() { NameRegex = new Regex($@"^{Regex.Escape(name)}\s*\d+$") });
+
+    /// <summary>The compare table's "Clear category": it clears the category whose tab is picked.</summary>
+    public static ILocator ClearCategory(IPage page) => page.GetByRole(AriaRole.Button, new() { Name = "Clear category", Exact = true });
 
     /// <summary>A product's column of the compare table, by the product's name.</summary>
     public static ILocator ProductColumn(IPage page, string name) => page.GetByRole(AriaRole.Columnheader, new() { Name = name, Exact = true });
