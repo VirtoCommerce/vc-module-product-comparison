@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using VirtoCommerce.Platform.Core.Security;
 using VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure;
 using VirtoCommerce.ProfileExperienceApiModule.Data.Models;
+using VirtoCommerce.ProfileExperienceApiModule.Data.Queries.AddressesQuery;
 using VirtoCommerce.ProfileExperienceApiModule.Data.Schemas;
 using VirtoCommerce.Xapi.Core.Extensions;
 using VirtoCommerce.Xapi.Core.Infrastructure;
@@ -24,7 +25,8 @@ namespace VirtoCommerce.ProductComparison.Tests.StorefrontE2E.Infrastructure;
 
 /// <summary>
 /// The root fields the storefront shell asks for around the product and compare pages (captured from the real
-/// storefront on 2026-11-04): pageContext, me, childCategories, cart, organization, menu, searchHistory. Schema-complete,
+/// storefront on 2026-11-04, and on 2026-11-05 for the address book that replaced `me`'s addresses): pageContext, me,
+/// currentCustomerAddresses, childCategories, cart, organization, menu, searchHistory. Schema-complete,
 /// so every selection set the storefront sends validates against the real response types; data-empty wherever the
 /// data is not under test. A root field that is simply missing fails the whole operation with a validation error.
 /// The store, the product and the compare list come from their real builders.
@@ -49,7 +51,7 @@ internal sealed class StorefrontShellSchemaBuilder : ISchemaBuilder
             Resolver = new FuncFieldResolver<object>(ResolvePageContextAsync),
         });
 
-        // X-Profile's `me`: the same user. A signed-in storefront asks it for the account's addresses on every load.
+        // X-Profile's `me`: the same user.
         schema.Query.AddField(new FieldType
         {
             Name = "me",
@@ -57,6 +59,14 @@ internal sealed class StorefrontShellSchemaBuilder : ISchemaBuilder
             Arguments = new QueryArguments(new QueryArgument<StringGraphType> { Name = "userId" }),
             Resolver = new FuncFieldResolver<object>(ResolveUser),
         });
+
+        // X-Profile's address book, which a signed-in storefront reads on every load for its ship-to selector. The
+        // real field is a connection: `first` and `after` come with it, not with the query's own arguments.
+        var addressArguments = Arguments<CurrentCustomerAddressesQuery>();
+        addressArguments.Add(new QueryArgument<IntGraphType> { Name = "first" });
+        addressArguments.Add(new QueryArgument<StringGraphType> { Name = "after" });
+        AddEmpty(schema, "currentCustomerAddresses", typeof(MemberAddressConnectionType<MemberAddressType>), addressArguments,
+            _ => new MemberAddressConnection<MemberAddress>([], 0, 0, 0));
 
         // The arguments come from the real query classes, so they match what the storefront's codegen saw.
         AddEmpty(schema, "childCategories", typeof(ChildCategoriesQueryResponseType), Arguments<ChildCategoriesQuery>(),

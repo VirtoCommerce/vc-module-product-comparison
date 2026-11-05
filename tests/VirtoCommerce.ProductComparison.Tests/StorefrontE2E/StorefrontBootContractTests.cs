@@ -112,8 +112,8 @@ public sealed class StorefrontBootContractTests
         buyerUser.GetProperty("id").GetString().Should().Be(buyerId);
         buyerUser.GetProperty("userName").GetString().Should().Be($"{buyerId}@test.com");
 
-        // A signed-in storefront also loads the account's addresses on every page, through `me`.
-        await PostAsync(buyer, "GetMyAddresses", Storefront("account/queries/getMyAddresses/getMyAddressesQuery.graphql"), new { first = 10 });
+        // A signed-in storefront also loads the account's address book on every page, for its ship-to selector.
+        await PostAsync(buyer, "GetCurrentUserAddresses", Storefront("account/queries/getCurrentCustomerAddresses/getCurrentCustomerAddresses.graphql"), new { first = 10 });
 
         // 7. The shell's other boot operations, which must at least validate and answer.
         await PostAsync(guest, "GetMenu", Storefront("common/queries/getMenu/getMenu.graphql"),
