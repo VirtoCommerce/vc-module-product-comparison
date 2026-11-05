@@ -17,8 +17,8 @@ a storefront without the module has no product comparison.
 * Configurable products compared with the buyer's chosen configuration; section and option names are read from the
   catalog each time, so they stay current and in the shopper's language
 * Reorder products within a category, clear one category or the whole list
-* Products deleted from the catalog leave every list; products that can no longer be shown come back as `null`, so the
-  storefront can show them as "no longer available"
+* Products deleted from the catalog leave every list; a product that no longer exists comes back as `null`, so the
+  storefront can show it as "no longer available"
 * A daily cleanup job removes guest lists left unchanged for 48 hours, lists of deleted users and lists for
   organizations a user has left
 * Per-store switches: product comparison on or off, guest comparison on or off, the per-category limit
@@ -36,7 +36,9 @@ All fields are on the main schema, `POST /graphql`. A scoped schema with only th
 * a guest passes the anonymous user id the storefront keeps for them and reaches only guest lists; an id that belongs
   to a registered user is refused;
 * an administrator may use any registered user's id. Guest lists stay the guests': an administrator's save under a
-  guest's id makes a separate list, which the cleanup deletes, since no user has that id.
+  guest's id makes a separate list, which the cleanup deletes, since no user has that id. The organization still
+  comes from the administrator's own token, which has none, so an administrator reaches a buyer's list without an
+  organization, not the lists the buyer keeps for their organizations.
 
 The organization is never an argument: the list belongs to the organization in the caller's token, so a buyer who
 switches organization sees that organization's list. Locked and expired accounts are refused.
@@ -83,7 +85,7 @@ guest list while guest comparison is off.
 | | `items` | The category's products, by position, at most the store's limit |
 | `CompareListItemType` | `id`, `productId`, `categoryId`, `position`, `createdDate` | |
 | | `configurationSections` | The chosen configuration of a configurable product |
-| | `product` | The catalog's `Product`; `null` when it no longer exists or isn't visible in the store |
+| | `product` | The catalog's `Product`; `null` when it no longer exists (an inactive or hidden product still comes back: see Accepted limits) |
 | `CompareListConfigurationSectionType` | `sectionId`, `type`, `productId`, `quantity`, `customText` | The stored choice |
 | | `configurationSection` | The section as the catalog has it now (name, options); `null` when it no longer exists |
 
@@ -238,6 +240,9 @@ also runs (the configured price) from `/graphql`.
 * Variations deleted together with their main product stay in lists. The catalog deletes them in the database, and
   its product change event names only the main product. They show as no longer available until the buyer removes
   them.
+* A product made inactive or hidden, or one outside the store's catalog, still shows as a normal column. X-Catalog
+  loads products by id without its visibility filters, as the storefront's earlier in-browser compare did too.
+  VCST-6715 proposes an option for loads by id that respects them.
 
 > ⚠️ **Multi-instance deployments must configure `ConnectionStrings:RedisConnectionString`.** Lists are cached per
 > instance, and only invalidations are shared, over the platform's Redis backplane. Without it, another instance can

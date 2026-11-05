@@ -176,8 +176,12 @@ function findItem(productId: string, configurationSections?: readonly Configurat
   return list.value?.items.find((item) => item.productId === productId && getItemConfigurationKey(item) === key);
 }
 
+function isGuestWithListsOff(): boolean {
+  return !useUser().isAuthenticated.value && !useModuleSettings(MODULE_ID).isEnabled(ANONYMOUS_LIST_ENABLED_KEY);
+}
+
 async function add(product: ProductType, configurationSections?: ConfigurationSectionInput[]): Promise<void> {
-  if (!useUser().isAuthenticated.value && !useModuleSettings(MODULE_ID).isEnabled(ANONYMOUS_LIST_ENABLED_KEY)) {
+  if (isGuestWithListsOff()) {
     warnSignInRequired();
     return;
   }
@@ -292,8 +296,13 @@ async function mergeGuestList(secondListId: string): Promise<boolean> {
     return true;
   } catch (error) {
     Logger.error("[product-comparison] merge", error);
-    if (getErrorCode(error)) {
+    const code = getErrorCode(error);
+    if (code) {
       guestListId.value = null;
+    }
+    // The guest's products didn't come over: the buyer learns why, as from a save at the cap.
+    if (code === CompareListErrorCode.Full) {
+      warn(t("product_comparison.notifications.list_full"));
     }
     return false;
   }
@@ -311,6 +320,11 @@ export function loadCompareList(): Promise<void> {
 
     // A guest's list is reachable only from the browser that remembers its id: without one there is nothing to load.
     if (!isAuthenticated && !secondListId) {
+      return;
+    }
+
+    // With guest lists off the server answers no list, though it keeps the guest's: the id waits for them to be back.
+    if (isGuestWithListsOff()) {
       return;
     }
 

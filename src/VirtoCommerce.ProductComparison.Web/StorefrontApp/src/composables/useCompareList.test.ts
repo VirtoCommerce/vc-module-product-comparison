@@ -206,6 +206,38 @@ describe("loading the list", () => {
     expect(facade.query).toHaveBeenCalledOnce();
     expect(store.useCompareCount().count.value).toBe(1);
     expect(localStorage.getItem(GUEST_LIST_KEY)).toBeNull();
+    expect(facade.notifications.warning).not.toHaveBeenCalled();
+  });
+
+  // Deep test C-F4: a merge refused because the account list is full keeps the guest's products out of the list, and
+  // they vanish from view. The buyer is told why, with the toast a save at the cap shows.
+  it("tells the buyer when the merge is refused because the list is full", async () => {
+    facade.isAuthenticated = true;
+    localStorage.setItem(GUEST_LIST_KEY, "guest-list");
+    answerMutations([[MergeCompareListDocument, refusal("COMPARE_LIST_FULL")]]);
+
+    const store = await loadStore(list([item()], "account-list"));
+
+    expect(facade.notifications.warning).toHaveBeenCalledOnce();
+    expect(facade.notifications.warning).toHaveBeenCalledWith(
+      expect.objectContaining({ text: expect.stringContaining("product_comparison.notifications.list_full") }),
+    );
+    expect(store.useCompareCount().count.value).toBe(1);
+    expect(localStorage.getItem(GUEST_LIST_KEY)).toBeNull();
+  });
+
+  // Deep test C-F3: while guest lists are off, the server answers a guest with no list but keeps theirs. Taking that
+  // for "the cleanup removed it" lost the list for good: once guest lists were back, the header and the toggles showed
+  // nothing while the page still listed the products.
+  it("keeps a guest's list id while guest lists are off, and doesn't ask for the list", async () => {
+    facade.settings["ProductComparison.AnonymousListEnabled"] = false;
+    localStorage.setItem(GUEST_LIST_KEY, "guest-list");
+
+    const store = await loadStore();
+
+    expect(facade.query).not.toHaveBeenCalled();
+    expect(localStorage.getItem(GUEST_LIST_KEY)).toBe("guest-list");
+    expect(store.useCompareCount().count.value).toBe(0);
   });
 
   // A request that never got an answer (offline, a gateway error) is not a refusal: forgetting the id then would lose
