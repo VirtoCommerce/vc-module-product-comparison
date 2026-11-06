@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { defineComponent, h, nextTick } from "vue";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { defineComponent, h, nextTick, toValue } from "vue";
 import CompareTable from "./compare-table.vue";
 import type { CompareProductFragment } from "../api/graphql/types";
 import type { ICompareColumn, ICompareTableRow } from "../types";
@@ -29,22 +29,28 @@ vi.mock("../composables/useCompareTableRowPins", () => ({
   }),
 }));
 
-// isCompact derives from useElementBounding's headerRowTop against useCssVar's app header height, both real layout
-// reads jsdom can't produce. One shared, real ref lets a case flip isCompact deterministically (and reactively: a live
-// watch on it is what's under test) by moving headerRowTop below or above the header height, fixed at 0.
+// isCompact derives from useElementBounding's anchor top, useElementSize's header row height and useCssVar's app
+// header height: real layout reads jsdom can't produce. They are mocked as shared, real refs, so a case drives
+// isCompact reactively (a live watch on it is what some cases test) by moving the anchor across the app header height
+// (0 unless a case sets it), by setting the row height and, through setRoomBelow, the room below the viewport.
 vi.mock("@vueuse/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@vueuse/core")>();
   const { ref: vueRef } = await import("vue");
-  const headerRowTop = vueRef(100); // > appHeaderHeight (0) + 1, i.e. not compact by default
+  const headerRowAnchorTop = vueRef(100); // > appHeaderHeight (0) + 1, i.e. not compact by default
+  const headerRowHeight = vueRef(0);
   const isMobile = vueRef(false);
+  const appHeaderHeight = vueRef("0");
 
   return {
     ...actual,
     useBreakpoints: () => ({ smaller: () => isMobile }),
-    useElementBounding: () => ({ top: headerRowTop, update: vi.fn() }),
-    useCssVar: () => vueRef("0"),
-    __headerRowTop: headerRowTop,
+    useElementBounding: vi.fn(() => ({ top: headerRowAnchorTop, update: vi.fn() })),
+    useElementSize: vi.fn(() => ({ width: vueRef(0), height: headerRowHeight })),
+    useCssVar: () => appHeaderHeight,
+    __headerRowAnchorTop: headerRowAnchorTop,
+    __headerRowHeight: headerRowHeight,
     __isMobile: isMobile,
+    __appHeaderHeight: appHeaderHeight,
   };
 });
 
@@ -117,14 +123,41 @@ function unavailable(id: string): ICompareColumn {
   return { item: { id: `item-${id}`, productId: id, configurationSections: [] } };
 }
 
+async function vueuseMock() {
+  return (await import("@vueuse/core")) as unknown as {
+    __headerRowAnchorTop: { value: number };
+    __headerRowHeight: { value: number };
+    __isMobile: { value: boolean };
+    __appHeaderHeight: { value: string };
+  };
+}
+
 async function setCompact(compact: boolean) {
-  const vueuseCore = (await import("@vueuse/core")) as unknown as { __headerRowTop: { value: number } };
-  vueuseCore.__headerRowTop.value = compact ? 0 : 100;
+  await setHeaderRowAnchorTop(compact ? 0 : 100);
+}
+
+async function setHeaderRowAnchorTop(top: number) {
+  (await vueuseMock()).__headerRowAnchorTop.value = top;
+}
+
+async function setHeaderRowHeight(height: number) {
+  (await vueuseMock()).__headerRowHeight.value = height;
+}
+
+async function setAppHeaderHeight(height: number) {
+  (await vueuseMock()).__appHeaderHeight.value = `${height}px`;
 }
 
 async function setMobile(mobile: boolean) {
-  const vueuseCore = (await import("@vueuse/core")) as unknown as { __isMobile: { value: boolean } };
-  vueuseCore.__isMobile.value = mobile;
+  (await vueuseMock()).__isMobile.value = mobile;
+}
+
+// jsdom lays nothing out, so scrollHeight is 0 unless a case gives the page room to scroll.
+function setRoomBelow(room: number) {
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: window.innerHeight + window.scrollY + room,
+  });
 }
 
 function row(key: string, values: string[]): ICompareTableRow {
@@ -163,8 +196,14 @@ function mountTable(props: { columns?: ICompareColumn[] } = {}) {
   });
 }
 
+beforeEach(() => {
+  setRoomBelow(10_000);
+});
+
 afterEach(async () => {
   await setCompact(false);
+  await setHeaderRowHeight(0);
+  await setAppHeaderHeight(0);
   await setMobile(false);
   tableRows.value = [];
 });
@@ -433,6 +472,177 @@ describe("CompareTable — Customize", () => {
 
     const links = wrapper.findAll("button[data-to]").map((button) => button.attributes("data-to"));
     expect(links).toContain(JSON.stringify({ path: "/p1", query: { compareItemId: "item-configured" } }));
+
+    wrapper.unmount();
+  });
+});
+
+// VCST-5938, ported from the storefront's own compare table (vc-frontend #2613): near the compact threshold the page
+// froze or bounced. Measuring the header row that the result restyles re-measured it on every class flip, and
+// compacting shortened the page, so the browser pulled the scroll back above the threshold, un-compacting the row.
+describe("CompareTable — compact threshold", () => {
+  const FULL_HEIGHT = 300;
+
+  it("keeps the full header row when the page has too little room below to absorb compacting", async () => {
+    setRoomBelow(FULL_HEIGHT - 1);
+    const wrapper = mountTable({ columns: [column("p1"), column("p2")] });
+    await setHeaderRowHeight(FULL_HEIGHT);
+    await nextTick();
+
+    await setCompact(true);
+    await nextTick();
+
+    expect(wrapper.findAll(".compare-table__product--compact")).toHaveLength(0);
+
+    wrapper.unmount();
+  });
+
+  it("stays compact once the page shrinks under the scroll, and leaves it as soon as the row unsticks", async () => {
+    setRoomBelow(FULL_HEIGHT);
+    const wrapper = mountTable({ columns: [column("p1"), column("p2")] });
+    await setHeaderRowHeight(FULL_HEIGHT);
+    await nextTick();
+
+    await setCompact(true);
+    await nextTick();
+    expect(wrapper.findAll(".compare-table__product--compact")).toHaveLength(2);
+
+    // The page shrank by what the row lost, and the browser pulled the scroll back: no room is left below, the
+    // anchor sits right at the threshold, and the row stays compact.
+    setRoomBelow(0);
+    await setHeaderRowAnchorTop(1);
+    await nextTick();
+    expect(wrapper.findAll(".compare-table__product--compact")).toHaveLength(2);
+
+    await setHeaderRowAnchorTop(2);
+    await nextTick();
+    expect(wrapper.findAll(".compare-table__product--compact")).toHaveLength(0);
+
+    wrapper.unmount();
+  });
+
+  it("needs only the room the compact row actually frees once its height is measured", async () => {
+    const COMPACT_HEIGHT = 100;
+    const wrapper = mountTable({ columns: [column("p1"), column("p2")] });
+    await setHeaderRowHeight(FULL_HEIGHT);
+    await nextTick();
+
+    await setCompact(true);
+    await nextTick();
+    await setHeaderRowHeight(COMPACT_HEIGHT);
+    await nextTick();
+    await setCompact(false);
+    await nextTick();
+    await setHeaderRowHeight(FULL_HEIGHT);
+    await nextTick();
+
+    setRoomBelow(FULL_HEIGHT - COMPACT_HEIGHT);
+    await setCompact(true);
+    await nextTick();
+
+    expect(wrapper.findAll(".compare-table__product--compact")).toHaveLength(2);
+
+    wrapper.unmount();
+  });
+
+  it.each([
+    [100, 2],
+    [99, 0],
+  ])(
+    "counts the distance already scrolled past the threshold as room, %i px below → %i compact cells",
+    async (room, compactCells) => {
+      setRoomBelow(room);
+      const wrapper = mountTable({ columns: [column("p1"), column("p2")] });
+      await setHeaderRowHeight(FULL_HEIGHT);
+      await nextTick();
+
+      // 200 px past the threshold plus the room below must cover the 300 px the full row would lose.
+      await setHeaderRowAnchorTop(-200);
+      await nextTick();
+
+      expect(wrapper.findAll(".compare-table__product--compact")).toHaveLength(compactCells);
+
+      wrapper.unmount();
+    },
+  );
+
+  it("measures the distance past the threshold from the app header's bottom edge", async () => {
+    await setHeaderRowAnchorTop(200);
+    await setAppHeaderHeight(100);
+    setRoomBelow(100);
+    const wrapper = mountTable({ columns: [column("p1"), column("p2")] });
+    await setHeaderRowHeight(FULL_HEIGHT);
+    await nextTick();
+
+    await setHeaderRowAnchorTop(-100);
+    await nextTick();
+
+    expect(wrapper.findAll(".compare-table__product--compact")).toHaveLength(2);
+
+    wrapper.unmount();
+  });
+
+  it("keeps the stuck styling on a full row that has too little room to compact", async () => {
+    setRoomBelow(FULL_HEIGHT - 1);
+    const wrapper = mountTable({ columns: [column("p1"), column("p2")] });
+    await setHeaderRowHeight(FULL_HEIGHT);
+    await nextTick();
+
+    await setCompact(true);
+    await nextTick();
+
+    expect(wrapper.findAll(".compare-table__product--compact")).toHaveLength(0);
+    expect(wrapper.get("thead").classes()).toContain("compare-table__header-row--stuck");
+
+    wrapper.unmount();
+  });
+
+  it("counts the room below from the current scroll position", async () => {
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 150 });
+
+    try {
+      setRoomBelow(150);
+      const wrapper = mountTable({ columns: [column("p1"), column("p2")] });
+      await setHeaderRowHeight(FULL_HEIGHT);
+      await nextTick();
+
+      await setHeaderRowAnchorTop(-50);
+      await nextTick();
+
+      expect(wrapper.findAll(".compare-table__product--compact")).toHaveLength(0);
+
+      wrapper.unmount();
+    } finally {
+      Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+    }
+  });
+
+  it("leaves compact when the viewport turns mobile", async () => {
+    const wrapper = mountTable({ columns: [column("p1"), column("p2")] });
+    await setHeaderRowHeight(FULL_HEIGHT);
+    await nextTick();
+
+    await setCompact(true);
+    await nextTick();
+    expect(wrapper.findAll(".compare-table__product--compact")).toHaveLength(2);
+
+    await setMobile(true);
+    await nextTick();
+
+    expect(wrapper.findAll(".compare-table__product--compact")).toHaveLength(0);
+
+    wrapper.unmount();
+  });
+
+  it("measures the anchor before the table for the position, and the header row for the height", async () => {
+    const { useElementBounding, useElementSize } = await import("@vueuse/core");
+    const wrapper = mountTable({ columns: [column("p1"), column("p2")] });
+    await nextTick();
+
+    const anchor = wrapper.find(".compare-table__header-row-anchor").element;
+    expect(anchor.closest("thead")).toBeNull();
+    expect(toValue(vi.mocked(useElementBounding).mock.lastCall?.[0])).toBe(anchor);
+    expect(toValue(vi.mocked(useElementSize).mock.lastCall?.[0])).toBe(wrapper.find("thead").element);
 
     wrapper.unmount();
   });

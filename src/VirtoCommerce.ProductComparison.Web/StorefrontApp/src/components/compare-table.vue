@@ -4,12 +4,16 @@
       <!-- Below md the design puts this block above the header row: teleported, so there is one tabs/differ instance. -->
       <div ref="mobileTabsBarRef" class="compare-table__mobile-tabs-bar"></div>
 
+      <!-- Where the sticky header row sits in the flow. The row itself isn't measured: sticking changes its class and
+           compacting its size, and each change would have it measured again. -->
+      <div ref="headerRowAnchorRef" class="compare-table__header-row-anchor"></div>
+
       <!-- An overflow-x wrapper would trap thead's page sticky, so thead and tbody scroll separately (synced in script). -->
       <table class="compare-table__table" :aria-label="$t('product_comparison.page.title')">
         <thead
           ref="headerRowRef"
           class="compare-table__header-row"
-          :class="{ 'compare-table__header-row--stuck': isCompact }"
+          :class="{ 'compare-table__header-row--stuck': isStuck }"
           tabindex="-1"
         >
           <tr class="compare-table__header-inner">
@@ -334,9 +338,9 @@
 </template>
 
 <script setup lang="ts">
-import { useBreakpoints, useCssVar, useElementBounding } from "@vueuse/core";
+import { useBreakpoints, useCssVar, useElementBounding, useElementSize } from "@vueuse/core";
 import { BREAKPOINTS, getProductRoute, InStock, useThemeContext } from "@vc-frontend/core";
-import { computed, nextTick, ref, useId, watch } from "vue";
+import { computed, nextTick, ref, useId, useTemplateRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useCompareAddToCart } from "../composables/useCompareAddToCart";
 import { useCompareTableRowPins } from "../composables/useCompareTableRowPins";
@@ -379,17 +383,48 @@ const activeTab = ref("all");
 const bodyScrollRef = ref<HTMLElement | null>(null);
 const mobileTabsBarRef = ref<HTMLElement | null>(null);
 const headerRowRef = ref<HTMLElement | null>(null);
+const headerRowAnchorRef = useTemplateRef<HTMLElement>("headerRowAnchorRef");
 const rowDescriptionIdPrefix = useId();
 
 // The app header's current height, kept live by the host's header, so the table's header row sticks right below it.
 const appHeaderHeightVar = useCssVar("--vc-app-header-height", undefined, { observe: true });
 const appHeaderHeight = computed(() => Number.parseFloat(appHeaderHeightVar.value ?? "0") || 0);
 
-// The row is stuck once its top meets the app header; then it compacts. Below md it sticks in its full layout.
-const { top: headerRowTop, update: updateHeaderRowBounding } = useElementBounding(headerRowRef);
-const isCompact = computed(() => !isMobile.value && headerRowTop.value <= appHeaderHeight.value + 1);
+// The row is stuck once the anchor before the table meets the app header. It compacts only while stuck, and only
+// when the page has room for it (isCompact). Below md it sticks in its full layout.
+const { top: headerRowAnchorTop, update: updateHeaderRowAnchorBounding } = useElementBounding(headerRowAnchorRef);
+const { height: headerRowHeight } = useElementSize(headerRowRef);
+const compactHeaderRowHeight = ref(0);
 
-watch(appHeaderHeight, () => updateHeaderRowBounding());
+const isStuck = computed(() => !isMobile.value && headerRowAnchorTop.value <= appHeaderHeight.value + 1);
+
+// Compacting shortens the page by the height the row loses, and the browser pulls the scroll back up by whatever the
+// room below can't absorb. If that pulls the anchor back under the threshold, the row un-compacts and the page grows
+// again, forever (VCST-5938): the distance already scrolled past the threshold absorbs that much of the pull-back.
+// Until the compact height is first measured, all of the full row's height counts as lost.
+const isCompact = computed<boolean>((wasCompact) => {
+  if (!isStuck.value) {
+    return false;
+  }
+
+  if (wasCompact) {
+    return true;
+  }
+
+  const lostHeight = headerRowHeight.value - compactHeaderRowHeight.value;
+  const roomBelow = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+  const pastThreshold = appHeaderHeight.value - headerRowAnchorTop.value;
+
+  return roomBelow + pastThreshold >= lostHeight;
+});
+
+watch(headerRowHeight, (height) => {
+  if (isCompact.value) {
+    compactHeaderRowHeight.value = height;
+  }
+});
+
+watch(appHeaderHeight, () => updateHeaderRowAnchorBounding());
 
 // Compacting swaps whole subtrees, which destroys whatever held focus; keep keyboard users on the header row.
 watch(isCompact, async () => {
