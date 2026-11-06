@@ -1,0 +1,38 @@
+#import "../../fragments/compareProduct.graphql"
+
+query CompareProducts($storeId: String!, $userId: String!, $cultureName: String, $currencyCode: String) {
+  compareList(storeId: $storeId, userId: $userId, cultureName: $cultureName, currencyCode: $currencyCode) {
+    id
+    categories {
+      id
+      category {
+        id
+        name
+      }
+      items {
+        id
+        productId
+        configurationSections {
+          sectionId
+          type
+          productId
+          quantity
+          customText
+          configurationSection {
+            id
+            name
+            options {
+              product {
+                id
+                name
+              }
+            }
+          }
+        }
+        product {
+          ...compareProduct
+        }
+      }
+    }
+  }
+}
