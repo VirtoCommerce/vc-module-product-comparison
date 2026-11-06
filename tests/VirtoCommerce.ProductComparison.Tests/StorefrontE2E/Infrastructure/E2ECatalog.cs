@@ -1,3 +1,6 @@
+using System.Threading.Tasks;
+using VirtoCommerce.ProductComparison.Tests.Infrastructure;
+
 namespace VirtoCommerce.ProductComparison.Tests.StorefrontE2E.Infrastructure;
 
 /// <summary>
@@ -23,18 +26,21 @@ internal static class E2ECatalog
 
     public const string DiscontinuedProductId = "e2e-discontinued";
 
-    public static void Seed(StorefrontCatalog catalog)
+    public static async Task SeedAsync(TestCatalog catalog)
     {
-        var printers = catalog.AddCategory(PrintersId, "Printers");
-        var laserPrinters = catalog.AddCategory(LaserPrintersId, LaserPrintersName, printers);
-        var paper = catalog.AddCategory(PaperId, "Paper");
-        var copyPaper = catalog.AddCategory(CopyPaperId, CopyPaperName, paper);
+        var printers = await catalog.AddCategoryAsync(PrintersId, "Printers");
+        var laserPrinters = await catalog.AddCategoryAsync(LaserPrintersId, LaserPrintersName, printers);
+        var paper = await catalog.AddCategoryAsync(PaperId, "Paper");
+        var copyPaper = await catalog.AddCategoryAsync(CopyPaperId, CopyPaperName, paper);
 
-        catalog.AddProduct(LaserJet100Id, LaserJet100Name, laserPrinters, 199m);
-        catalog.AddProduct(LaserJet200Id, LaserJet200Name, laserPrinters, 249m);
-        catalog.AddProduct(CopyPaperA4Id, CopyPaperA4Name, copyPaper, 9.99m);
+        await catalog.AddProductAsync(LaserJet100Id, LaserJet100Name, laserPrinters, 199m);
+        await catalog.AddProductAsync(LaserJet200Id, LaserJet200Name, laserPrinters, 249m);
+        await catalog.AddProductAsync(CopyPaperA4Id, CopyPaperA4Name, copyPaper, 9.99m);
     }
 
     /// <summary>A product's page: <c>/product/{id}</c>, the link the storefront makes for a product without a semantic URL.</summary>
     public static string ProductPage(string productId) => $"/product/{productId}";
+
+    /// <summary>A category's page: <c>/category/{id}</c>, the storefront's route for a category by id, with its product cards.</summary>
+    public static string CategoryPage(string categoryId) => $"/category/{categoryId}";
 }

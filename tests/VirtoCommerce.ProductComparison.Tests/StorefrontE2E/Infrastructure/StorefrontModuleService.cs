@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using VirtoCommerce.Platform.Core.Common;
 using VirtoCommerce.Platform.Core.Modularity;
+using VirtoCommerce.ProductComparison.Tests.Infrastructure;
 
 namespace VirtoCommerce.ProductComparison.Tests.StorefrontE2E.Infrastructure;
 
@@ -36,18 +36,15 @@ internal sealed class StorefrontModuleService : IModuleService
 
     private static List<ManifestModuleInfo> CreateInstalledModules()
     {
-        var manifest = ManifestReader.Read(Path.Combine(StorefrontPlugin.ModuleDirectory, "module.manifest"));
-
-        var productComparison = new ManifestModuleInfo().LoadFromManifest(manifest);
-        // Where the platform looks for the plugin's build (plugins/vc-frontend).
-        productComparison.FullPhysicalPath = StorefrontPlugin.ModuleDirectory;
+        // Rooted at the Web project, where the platform looks for the plugin's build (plugins/vc-frontend).
+        var productComparison = TestedModule.CreateInfo();
 
         // X-Frontend's own manifest ships only in its module zip, so its app declaration is restated here.
         var xFrontend = new ManifestModuleInfo().LoadFromManifest(new ModuleManifest
         {
             Id = "VirtoCommerce.XFrontend",
             Version = StandInVersion,
-            PlatformVersion = manifest.PlatformVersion,
+            PlatformVersion = productComparison.PlatformVersion.ToString(),
             Apps = [new ManifestApp { Id = "vc-frontend" }],
         });
 

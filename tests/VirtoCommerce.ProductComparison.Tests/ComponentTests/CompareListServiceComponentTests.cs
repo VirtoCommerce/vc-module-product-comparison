@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using VirtoCommerce.Platform.Core.Common;
+using VirtoCommerce.Platform.Data.Constants;
 using VirtoCommerce.ProductComparison.Core.Models;
 using VirtoCommerce.ProductComparison.Data.Models;
 using VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure;
@@ -24,7 +25,7 @@ public class CompareListServiceComponentTests
     [Fact]
     public async Task SavedList_LoadsBackFieldByField()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var startedAt = DateTime.UtcNow;
         var list = AccountList("buyer-1", organizationId: "org-1", items:
         [
@@ -53,7 +54,7 @@ public class CompareListServiceComponentTests
         loaded.IsAnonymous.Should().BeFalse();
         loaded.CreatedDate.Should().BeOnOrAfter(startedAt);
         loaded.ModifiedDate.Should().Be(loaded.CreatedDate);
-        loaded.CreatedBy.Should().Be(PlatformAuditTriggers.UserName);
+        loaded.CreatedBy.Should().Be(DefaultEntityNames.UNKNOWN_USERNAME, "saved outside a request, which the platform stamps so");
 
         loaded.Items.Select(ItemFields).Should().BeEquivalentTo(list.Items.Select(ItemFields));
         loaded.Items.Should().OnlyContain(x => x.CreatedDate >= startedAt && x.ModifiedDate == x.CreatedDate);
@@ -71,7 +72,7 @@ public class CompareListServiceComponentTests
         // An add, a move or a remove changes only CompareListItem rows; nothing on the CompareList row changes. The
         // platform's CrudService still stamps the list's ModifiedDate on every update, and the cleanup relies on it:
         // a guest list whose date stood still while the guest kept comparing would be deleted as abandoned.
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var list = await ctx.SaveAsync(GuestList("guest-1", items: [Item("printer-1", "printers", 0), Item("printer-2", "printers", 1)]));
         var threeDaysAgo = DateTime.UtcNow.AddDays(-3);
         await ctx.SetDatesAsync(list.Id, createdDate: threeDaysAgo, modifiedDate: threeDaysAgo);
@@ -110,7 +111,7 @@ public class CompareListServiceComponentTests
     [Fact]
     public async Task RemovedItem_TakesItsSectionsWithIt()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var list = await ctx.SaveAsync(AccountList("buyer-1", items:
         [
             Item("printer-1", "printers", 0, configurationKey: "key-a", sections: [ProductSection("ink", "ink-black"), TextSection("engraving", "Hi")]),
@@ -129,7 +130,7 @@ public class CompareListServiceComponentTests
     [Fact]
     public async Task DeletedList_TakesItsItemsAndSectionsWithIt()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var deleted = await ctx.SaveAsync(GuestList("guest-1", items:
         [
             Item("printer-1", "printers", 0, configurationKey: "key-a", sections: [ProductSection("ink", "ink-black"), TextSection("engraving", "Hi")]),

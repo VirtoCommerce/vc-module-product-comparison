@@ -7,8 +7,12 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
+using VirtoCommerce.CartModule.Core.Model;
+using VirtoCommerce.CartModule.Core.Model.Search;
+using VirtoCommerce.CartModule.Core.Services;
 using VirtoCommerce.ProductComparison.Data.Models;
 using VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure;
+using VirtoCommerce.ProductComparison.Tests.Infrastructure;
 using Xunit;
 
 namespace VirtoCommerce.ProductComparison.Tests.StorefrontE2E.Infrastructure;
@@ -50,10 +54,11 @@ public abstract class StorefrontEnvironment : IAsyncLifetime
         _backend = await InProcessBackend.StartAsync(storefront.BuildDirectory, port);
         Log($"backend ready at {_backend.Url}");
 
-        ConfigureStore(_backend.Context);
-        E2ECatalog.Seed(_backend.Catalog);
+        await ConfigureStoreAsync(_backend.Context);
+        await E2ECatalog.SeedAsync(_backend.Catalog);
         await SeedAsync(_backend.Catalog);
-        Log("seeded");
+        await _backend.Catalog.IndexAsync();
+        Log("seeded and indexed");
 
         if (storefront.BuildDirectory != null)
         {
@@ -81,13 +86,11 @@ public abstract class StorefrontEnvironment : IAsyncLifetime
         File.AppendAllText(PhaseLog, $"{DateTime.Now:HH:mm:ss.fff} [{GetType().Name}] {phase}{Environment.NewLine}");
     }
 
-    /// <summary>The group's store settings, applied before the first page opens; the module's defaults otherwise.</summary>
-    private protected virtual void ConfigureStore(ProductComparisonTestContext context)
-    {
-    }
+    /// <summary>The group's store settings, saved before the first page opens; the defaults otherwise.</summary>
+    private protected virtual Task ConfigureStoreAsync(ProductComparisonTestContext context) => Task.CompletedTask;
 
-    /// <summary>The group's own data, after the shared catalog and before the first page opens: products, lists.</summary>
-    private protected virtual Task SeedAsync(StorefrontCatalog catalog) => Task.CompletedTask;
+    /// <summary>The group's own data, after the shared catalog, before the index is built and the first page opens.</summary>
+    private protected virtual Task SeedAsync(TestCatalog catalog) => Task.CompletedTask;
 
     /// <summary>
     /// Test-side work against the harness, between requests: the page may still be fetching, and the in-memory database
@@ -100,18 +103,18 @@ public abstract class StorefrontEnvironment : IAsyncLifetime
     /// </summary>
     internal static string NewGuestId() => Guid.NewGuid().ToString();
 
-    /// <summary>A registered buyer of the test's own (an account without a contact or an organization).</summary>
-    internal string NewBuyer()
+    /// <summary>A registered buyer of the test's own (a contact and its account, no organization), created between requests.</summary>
+    internal async Task<string> NewBuyerAsync()
     {
         var n = (++_buyers).ToString(CultureInfo.InvariantCulture);
         var userId = $"e2e-buyer-{GetType().Name}-{n}".ToLowerInvariant();
-        _backend.Context.Users.Add(userId);
+        await RunExclusiveAsync(context => context.AddBuyerAsync(userId));
 
         return userId;
     }
 
     /// <summary>A token for the buyer, as /connect/token issues one.</summary>
-    internal TokenResponse IssueToken(string userId) => _backend.Tokens.Issue(userId);
+    internal Task<TokenResponse> IssueTokenAsync(string userId) => RunExclusiveAsync(_ => _backend.Tokens.IssueAsync(userId));
 
     /// <summary>
     /// Saves products to a guest's compare list through the real mutation the storefront sends, as the guest, between
@@ -145,6 +148,14 @@ public abstract class StorefrontEnvironment : IAsyncLifetime
                 .Include(x => x.Items)
                 .Where(x => x.UserId == userId && x.StoreId == InProcessBackend.StoreId)
                 .ToListAsync();
+        });
+
+    /// <summary>The user's carts in the store, with their items, through the cart module's search service, read between requests.</summary>
+    internal Task<IList<ShoppingCart>> GetCartsAsync(string userId)
+        => RunExclusiveAsync<IList<ShoppingCart>>(async context =>
+        {
+            var criteria = new ShoppingCartSearchCriteria { CustomerId = userId, StoreId = InProcessBackend.StoreId };
+            return (await context.GetRequiredService<IShoppingCartSearchService>().SearchAsync(criteria)).Results;
         });
 
     /// <summary>

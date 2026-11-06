@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using VirtoCommerce.ProductComparison.Tests.Infrastructure;
 
 namespace VirtoCommerce.ProductComparison.Tests.StorefrontE2E.Infrastructure;
 
@@ -20,14 +21,9 @@ internal static class StorefrontPlugin
     /// <summary>The platform's static-file route for the module's plugin; AppManifestService builds its URLs on it.</summary>
     public const string RequestPath = $"/modules/$({ModuleId})/plugins/vc-frontend";
 
-    /// <summary>The module's root as the platform sees it (its FullPhysicalPath): the Web project.</summary>
-    public static string ModuleDirectory { get; } = Path.GetFullPath(
-        // bin/Debug/net10.0 -> tests project -> tests -> repo
-        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "VirtoCommerce.ProductComparison.Web"));
+    public static string BuildDirectory => Path.Combine(TestedModule.Directory, "plugins", "vc-frontend");
 
-    public static string BuildDirectory => Path.Combine(ModuleDirectory, "plugins", "vc-frontend");
-
-    private static string AppDirectory => Path.Combine(ModuleDirectory, "StorefrontApp");
+    private static string AppDirectory => Path.Combine(TestedModule.Directory, "StorefrontApp");
 
     public static void EnsureBuilt()
     {

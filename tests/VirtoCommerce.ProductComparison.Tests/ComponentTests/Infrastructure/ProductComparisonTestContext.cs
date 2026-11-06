@@ -1,16 +1,23 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using GraphQL;
-using Microsoft.Data.Sqlite;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using OpenIddict.Abstractions;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using VirtoCommerce.CatalogModule.Core.Events;
 using VirtoCommerce.CatalogModule.Core.Model;
+using VirtoCommerce.CoreModule.Core.Currency;
+using VirtoCommerce.CustomerModule.Core.Model;
+using VirtoCommerce.CustomerModule.Core.Services;
 using VirtoCommerce.Platform.Caching;
 using VirtoCommerce.Platform.Core;
 using VirtoCommerce.Platform.Core.Common;
@@ -20,86 +27,99 @@ using VirtoCommerce.Platform.Core.Settings;
 using VirtoCommerce.ProductComparison.Core.Models;
 using VirtoCommerce.ProductComparison.Core.Services;
 using VirtoCommerce.ProductComparison.Data.BackgroundJobs;
-using VirtoCommerce.ProductComparison.Data.Handlers;
 using VirtoCommerce.ProductComparison.Data.Models;
 using VirtoCommerce.ProductComparison.Data.Repositories;
 using VirtoCommerce.ProductComparison.Tests.Infrastructure;
 using VirtoCommerce.ProductComparison.Xapi;
+using VirtoCommerce.StoreModule.Core.Model;
+using VirtoCommerce.StoreModule.Core.Services;
 using VirtoCommerce.Xapi.Core.Infrastructure;
 using CustomerSecurity = VirtoCommerce.CustomerModule.Core.ModuleConstants.Security;
 
 namespace VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure;
 
 /// <summary>
-/// Isolated per-test harness: the module's real services, repository, job, event handler and GraphQL schema, over
-/// an in-memory SQLite database created from the EF model with <c>EnsureCreated</c>, registered by the module's own
-/// <c>Module.Initialize</c> (<see cref="TestServicesConfiguration"/>). Tests act through the services, the job, the
-/// event bus or a GraphQL document executed in-process as a guest, a signed-in buyer or an administrator, and
-/// assert on the results and on the rows.
+/// Isolated per-test harness: the module as the platform runs it, its own <c>Module.Initialize</c> and
+/// <c>Module.PostInitialize</c> included, among the real platform and modules around it (<see cref="PlatformModules"/>:
+/// settings, accounts, stores, currencies, contacts, the catalog, X-API, X-Catalog, X-Cart), every database an in-memory
+/// SQLite one. Tests seed through those modules' services as an administrator would, act through the module's
+/// services, its job, the event bus or a GraphQL document executed in-process as a guest, a signed-in buyer or an
+/// administrator, and assert on the results, the rows and the SQL the modules ran.
 /// </summary>
 /// <remarks>
 /// <list type="bullet">
-/// <item>Two stores exist, <see cref="StoreId"/> and <see cref="OtherStoreId"/>, with the module's default
-/// settings until a test changes one (<see cref="SetStoreSetting"/>).</item>
-/// <item>Accounts, contacts and module settings are doubles that start empty: a registered buyer exists only once
-/// a test adds it (<see cref="Users"/>).</item>
-/// <item>The database lives on one SQLite connection, which isn't thread-safe: a test runs one call at a time, and
-/// a GraphQL document selects one root field.</item>
+/// <item>Two stores exist, <see cref="StoreId"/> and <see cref="OtherStoreId"/>, in USD and en-US, with every
+/// store-level setting at its default until a test saves one (<see cref="SetStoreSettingAsync"/>).</item>
+/// <item>No account, contact or catalog exists until a test adds it (<see cref="AddUserAsync"/>,
+/// <see cref="AddContactAsync"/>, <see cref="Catalog"/>).</item>
+/// <item>Each database lives on one SQLite connection, which isn't thread-safe: a test runs one call at a time, and a
+/// GraphQL document selects one root field.</item>
 /// </list>
 /// </remarks>
-internal sealed class ProductComparisonTestContext : IDisposable
+internal sealed class ProductComparisonTestContext : IAsyncDisposable
 {
     public const string StoreId = "B2B-store";
     public const string OtherStoreId = "Electronics";
+    public const string CultureName = "en-US";
+    public const string CurrencyCode = "USD";
 
-    private readonly SqliteConnection _connection;
     private readonly IServiceProvider _provider;
     private readonly bool _ownsProvider;
-    private readonly DbContextOptions<ProductComparisonDbContext> _dbContextOptions;
 
-    private ProductComparisonTestContext(SqliteConnection connection, IServiceProvider provider, bool ownsProvider, DbContextOptions<ProductComparisonDbContext> dbContextOptions)
+    private ProductComparisonTestContext(IServiceProvider provider, bool ownsProvider)
     {
-        _connection = connection;
         _provider = provider;
         _ownsProvider = ownsProvider;
-        _dbContextOptions = dbContextOptions;
     }
 
-    /// <param name="configureOverrides">Last-wins registrations applied after the standard slices, for a test that
-    /// needs a service of its own in place of the module's.</param>
-    /// <param name="providerFactory">Builds the provider from the configured collection instead of a plain
-    /// <c>BuildServiceProvider()</c>. The storefront E2E host passes one that copies the registrations into a Kestrel
-    /// <c>WebApplication</c>, so the same services answer the real storefront; the caller then owns that provider.</param>
-    public static ProductComparisonTestContext Create(Action<IServiceCollection> configureOverrides = null, Func<IServiceCollection, IServiceProvider> providerFactory = null)
+    /// <param name="configureServices">Registrations added after the platform's and the module's: the storefront
+    /// E2E's shell, or a test's observer of the module's outgoing requests.</param>
+    /// <param name="buildHost">Builds the host from the configured collection instead of a bare application builder over
+    /// it. The storefront E2E passes one that copies the registrations into a Kestrel <c>WebApplication</c> with its
+    /// request pipeline so far, so the startup below adds the GraphQL endpoints to it and the same services answer the
+    /// real storefront; the caller then owns that host.</param>
+    public static async Task<ProductComparisonTestContext> CreateAsync(Action<IServiceCollection> configureServices = null, Func<IServiceCollection, IApplicationBuilder> buildHost = null)
     {
-        // The platform reads the current user id from these claim types, configured at startup. "sub" first, as the
-        // platform's tokens carry it (the storefront E2E signs buyers in with such a token); the component tests'
-        // principals carry NameIdentifier.
-        ClaimsPrincipalExtensions.UserIdClaimTypes = [OpenIddictConstants.Claims.Subject, ClaimTypes.NameIdentifier];
+        var configuration = CreateConfiguration();
+        var module = TestedModule.Create(configuration);
 
-        var connection = SqliteTestDbContextFactory.CreateConnection();
-        var dbContextOptions = SqliteTestDbContextFactory.CreateOptions<ProductComparisonDbContext>(connection);
+        var services = new ServiceCollection().AddPlatformModules(configuration);
+        module.Initialize(services);
+        services.RemoveAll<DbContextOptions<ProductComparisonDbContext>>();
+        services.AddModuleDatabase<ProductComparisonDbContext>();
+        services.AddSingleton<TestCatalog>();
+        configureServices?.Invoke(services);
 
-        var services = new ServiceCollection()
-            .AddPlatformSlice()
-            .AddProductComparisonModule(dbContextOptions)
-            .AddXapiSlice();
+        var ownsProvider = buildHost == null;
+        var app = ownsProvider
+            ? new ApplicationBuilder(services.AddSingleton(configuration).BuildServiceProvider())
+            : buildHost(services);
 
-        configureOverrides?.Invoke(services);
+        await PlatformModules.PostInitializeAsync(app);
+        module.PostInitialize(app);
 
-        var ownsProvider = providerFactory == null;
-        var provider = ownsProvider ? services.BuildServiceProvider() : providerFactory(services);
-
-        // Module.PostInitialize: appBuilder.RegisterEventHandler<ProductChangedEvent, ProductChangedEventHandler>().
-        provider.GetRequiredService<IEventHandlerRegistrar>()
-            .RegisterEventHandler<ProductChangedEvent>(provider.GetRequiredService<ProductChangedEventHandler>());
-
-        var context = new ProductComparisonTestContext(connection, provider, ownsProvider, dbContextOptions);
-        context.Stores.Add(StoreId);
-        context.Stores.Add(OtherStoreId);
+        var context = new ProductComparisonTestContext(app.ApplicationServices, ownsProvider);
+        await context.SeedAsync();
 
         return context;
     }
+
+    /// <summary>
+    /// What the platform's shipped appsettings.json sets that the hosted code reads; every other option keeps its
+    /// default: the store X-API's store query falls back to for a domain no store claims, the GraphQL playground (and
+    /// with it schema introspection), and the authentication types GraphQL ignores. The platform's country lists, which
+    /// it ships in its own content root, are the copies in <c>Platform/localization</c>.
+    /// </summary>
+    private static IConfiguration CreateConfiguration() => new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string, string>
+        {
+            ["VirtoCommerce:Stores:DefaultStore"] = StoreId,
+            ["VirtoCommerce:GraphQLPlayground:Enable"] = "true",
+            ["VirtoCommerce:GraphQL:ForbiddenAuthenticationTypes:0"] = "Identity.Application",
+            ["VirtoCommerce:CountriesFilePath"] = Path.Combine(AppContext.BaseDirectory, "Platform", "localization", "common", "countries.json"),
+            ["VirtoCommerce:CountryRegionsFilePath"] = Path.Combine(AppContext.BaseDirectory, "Platform", "localization", "common", "countriesRegions.json"),
+        })
+        .Build();
 
     public T GetRequiredService<T>() where T : notnull => _provider.GetRequiredService<T>();
 
@@ -110,22 +130,92 @@ internal sealed class ProductComparisonTestContext : IDisposable
     /// <summary>A fresh job, as the recurring job's handler resolves it on each run.</summary>
     public CleanupCompareListsJob CleanupJob => GetRequiredService<CleanupCompareListsJob>();
 
-    public TestUsers Users => GetRequiredService<TestUsers>();
+    /// <summary>The catalog, set up through the catalog and pricing modules: <see cref="TestCatalog.InitializeAsync"/> first.</summary>
+    public TestCatalog Catalog => GetRequiredService<TestCatalog>();
 
-    public TestMemberService Members => GetRequiredService<TestMemberService>();
+    /// <summary>The SQL the modules' databases ran; clear it before the action a test measures.</summary>
+    public SqlCommandLog Sql => GetRequiredService<SqlCommandLog>();
 
-    public TestStoreService Stores => GetRequiredService<TestStoreService>();
-
-    /// <summary>Overrides a module-level setting; left unset, a setting reports its descriptor default.</summary>
-    public void SetSetting(SettingDescriptor descriptor, object value)
+    /// <summary>
+    /// A customer's account in <see cref="StoreId"/>, created through the platform's UserManager into the security
+    /// database, with what the storefront's registration sets: the store, the customer type and the contact
+    /// (<paramref name="memberId"/>, if any).
+    /// </summary>
+    public async Task<ApplicationUser> AddUserAsync(string userId, string memberId = null)
     {
-        GetRequiredService<TestSettingsManager>().Values[descriptor.Name] = value;
+        var user = new ApplicationUser
+        {
+            Id = userId,
+            UserName = $"{userId}@test.com",
+            Email = $"{userId}@test.com",
+            StoreId = StoreId,
+            MemberId = memberId,
+            UserType = "Customer",
+        };
+
+        await RunScopedAsync<UserManager<ApplicationUser>>(async users => EnsureSucceeded(await users.CreateAsync(user)));
+
+        return user;
     }
 
-    /// <summary>Saves a store-level setting for a store, as an administrator does on the store's settings.</summary>
-    public void SetStoreSetting(string storeId, SettingDescriptor descriptor, object value)
+    /// <summary>
+    /// A buyer as the storefront's registration creates one: a contact, saved through the customer module, and its
+    /// account. The storefront's profile queries (the address book) answer only an account that has a contact.
+    /// </summary>
+    public async Task<ApplicationUser> AddBuyerAsync(string userId)
     {
-        Stores.SetSetting(storeId, descriptor, value);
+        var contactId = $"{userId}-contact";
+        await AddContactAsync(contactId);
+
+        return await AddUserAsync(userId, contactId);
+    }
+
+    /// <summary>Locked as the platform's "Lock" action locks an account.</summary>
+    public Task LockOutUserAsync(string userId)
+        => RunScopedAsync<UserManager<ApplicationUser>>(async users =>
+            EnsureSucceeded(await users.SetLockoutEndDateAsync(await users.FindByIdAsync(userId), DateTime.MaxValue.ToUniversalTime())));
+
+    /// <summary>
+    /// Stamps the account's last sign-in, as the platform's token endpoint does on each sign-in: an account change, so
+    /// the platform drops its cached copies of the account.
+    /// </summary>
+    public Task RecordSignInAsync(string userId)
+        => RunScopedAsync<UserManager<ApplicationUser>>(async users =>
+        {
+            var user = await users.FindByIdAsync(userId);
+            user.LastLoginDate = DateTime.UtcNow;
+            EnsureSucceeded(await users.UpdateAsync(user));
+        });
+
+    /// <summary>A contact belonging to the organizations, saved through the customer module with the ones it doesn't have yet.</summary>
+    public Task AddContactAsync(string memberId, params string[] organizationIds)
+        => AddMemberAsync(new Contact { Id = memberId, Name = memberId, FirstName = memberId, LastName = memberId, Organizations = organizationIds.ToList() }, organizationIds);
+
+    /// <summary>An employee belonging to the organizations, as <see cref="AddContactAsync"/>.</summary>
+    public Task AddEmployeeAsync(string memberId, params string[] organizationIds)
+        => AddMemberAsync(new Employee { Id = memberId, Name = memberId, FirstName = memberId, LastName = memberId, Organizations = organizationIds.ToList() }, organizationIds);
+
+    private async Task AddMemberAsync(Member member, string[] organizationIds)
+    {
+        var members = GetRequiredService<IMemberService>();
+        var existing = (await members.GetByIdsAsync(organizationIds)).Select(x => x.Id);
+        var organizations = organizationIds.Except(existing).Select(id => new Organization { Id = id, Name = id });
+
+        await members.SaveChangesAsync([.. organizations, member]);
+    }
+
+    /// <summary>Saves a module-level setting, as an administrator does in the platform's settings.</summary>
+    public Task SetSettingAsync(SettingDescriptor descriptor, object value)
+        => GetRequiredService<ISettingsManager>().SetValueAsync(descriptor.Name, value);
+
+    /// <summary>Saves a store-level setting, as an administrator does on the store's settings: the store is saved with it.</summary>
+    public async Task SetStoreSettingAsync(string storeId, SettingDescriptor descriptor, object value)
+    {
+        var stores = GetRequiredService<IStoreService>();
+        var store = await stores.GetByIdAsync(storeId);
+        store.Settings.Single(x => x.Name == descriptor.Name).Value = value;
+
+        await stores.SaveChangesAsync([store]);
     }
 
     /// <summary>Saves new or changed lists through the real CRUD service (events, cache, audit stamps).</summary>
@@ -192,7 +282,7 @@ internal sealed class ProductComparisonTestContext : IDisposable
     }
 
     /// <summary>Fresh DbContext on the module's database, for seeding and for asserting on rows.</summary>
-    public ProductComparisonDbContext NewDbContext() => new(_dbContextOptions);
+    public ProductComparisonDbContext NewDbContext() => new(GetRequiredService<DbContextOptions<ProductComparisonDbContext>>());
 
     /// <summary>Executes a GraphQL document as an anonymous caller, a guest of the storefront.</summary>
     public Task<GraphQlResponse> ExecuteAsGuestAsync(string query)
@@ -225,25 +315,76 @@ internal sealed class ProductComparisonTestContext : IDisposable
         return ExecuteAsync(query, new ClaimsPrincipal(identity));
     }
 
-    // The module's own schema, built from its schema builders only, executed in a DI scope of its own as the
-    // GraphQL middleware executes a request.
+    // The module's own schema (/graphql/product-comparison), built from its schema builders only, executed as the
+    // GraphQL middleware executes a request: in a DI scope of its own, within the HTTP request it came with (a JSON
+    // POST by the caller), which X-API's content type rule, the request cache and the audit stamps read.
     private async Task<GraphQlResponse> ExecuteAsync(string query, ClaimsPrincipal principal)
     {
-        using var scope = _provider.CreateScope();
+        await using var scope = _provider.CreateAsyncScope();
 
-        var executer = scope.ServiceProvider.GetRequiredService<IDocumentExecuter>();
-        var serializer = scope.ServiceProvider.GetRequiredService<IGraphQLTextSerializer>();
-        var schema = _provider.GetRequiredService<ScopedSchemaFactory<XapiAssemblyMarker>>();
+        var httpContextAccessor = _provider.GetRequiredService<IHttpContextAccessor>();
+        var httpContext = new DefaultHttpContext { RequestServices = scope.ServiceProvider, User = principal };
+        httpContext.Request.Method = HttpMethods.Post;
+        httpContext.Request.ContentType = "application/json";
+        httpContextAccessor.HttpContext = httpContext;
 
-        var result = await executer.ExecuteAsync(options =>
+        try
         {
-            options.Schema = schema;
-            options.Query = query;
-            options.RequestServices = scope.ServiceProvider;
-            options.UserContext = new GraphQLUserContext(principal);
-        });
+            var executer = scope.ServiceProvider.GetRequiredService<IDocumentExecuter>();
+            var serializer = scope.ServiceProvider.GetRequiredService<IGraphQLTextSerializer>();
+            var schema = _provider.GetRequiredService<ScopedSchemaFactory<XapiAssemblyMarker>>();
 
-        return new GraphQlResponse(serializer.Serialize(result));
+            var result = await executer.ExecuteAsync(options =>
+            {
+                options.Schema = schema;
+                options.Query = query;
+                options.RequestServices = scope.ServiceProvider;
+                options.UserContext = new GraphQLUserContext(principal);
+            });
+
+            return new GraphQlResponse(serializer.Serialize(result));
+        }
+        finally
+        {
+            httpContextAccessor.HttpContext = null;
+        }
+    }
+
+    /// <summary>The currency and the two stores every test starts with, saved through the core and store modules.</summary>
+    private async Task SeedAsync()
+    {
+        await GetRequiredService<ICurrencyService>().SaveChangesAsync(
+        [
+            new Currency { Code = CurrencyCode, Name = "US Dollar", ExchangeRate = 1m, IsPrimary = true },
+        ]);
+
+        await GetRequiredService<IStoreService>().SaveChangesAsync([NewStore(StoreId), NewStore(OtherStoreId)]);
+    }
+
+    private static Store NewStore(string storeId) => new()
+    {
+        Id = storeId,
+        Name = storeId,
+        Catalog = TestCatalog.CatalogId,
+        DefaultLanguage = CultureName,
+        Languages = [CultureName],
+        DefaultCurrency = CurrencyCode,
+        Currencies = [CurrencyCode],
+    };
+
+    // As a request runs it: the scoped services (UserManager over its DbContext) live for the call.
+    private async Task RunScopedAsync<TService>(Func<TService, Task> work) where TService : notnull
+    {
+        await using var scope = _provider.CreateAsyncScope();
+        await work(scope.ServiceProvider.GetRequiredService<TService>());
+    }
+
+    private static void EnsureSucceeded(IdentityResult result)
+    {
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(string.Join("; ", result.Errors.Select(x => x.Description)));
+        }
     }
 
     private static void ExpireCaches()
@@ -252,13 +393,11 @@ internal sealed class ProductComparisonTestContext : IDisposable
         GenericSearchCachingRegion<CompareList>.ExpireRegion();
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        if (_ownsProvider)
+        if (_ownsProvider && _provider is IAsyncDisposable provider)
         {
-            (_provider as IDisposable)?.Dispose();
+            await provider.DisposeAsync();
         }
-
-        _connection.Dispose();
     }
 }

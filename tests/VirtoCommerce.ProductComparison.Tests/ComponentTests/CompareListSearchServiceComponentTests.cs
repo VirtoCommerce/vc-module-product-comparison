@@ -23,7 +23,7 @@ public class CompareListSearchServiceComponentTests
     [Fact]
     public async Task StoreUserAndOrganization_EachNarrowTheResult()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var lists = await SeedAsync(ctx);
 
         (await SearchAsync(ctx, new CompareListSearchCriteria { StoreId = OtherStore }))
@@ -41,7 +41,7 @@ public class CompareListSearchServiceComponentTests
     {
         // A guest or a buyer without an organization must never get a list kept for one of a buyer's organizations:
         // without this criterion the lookup for (buyer-1, no organization) would match all three of buyer-1's lists.
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var lists = await SeedAsync(ctx);
 
         (await SearchAsync(ctx, new CompareListSearchCriteria { StoreId = ProductComparisonTestContext.StoreId, UserId = "buyer-1", OrganizationIdIsEmpty = true }))
@@ -54,7 +54,7 @@ public class CompareListSearchServiceComponentTests
     [Fact]
     public async Task IsAnonymous_SplitsGuestListsFromRegisteredOnes()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var lists = await SeedAsync(ctx);
 
         (await SearchAsync(ctx, new CompareListSearchCriteria { IsAnonymous = true }))
@@ -70,7 +70,7 @@ public class CompareListSearchServiceComponentTests
     [Fact]
     public async Task ModifiedBefore_FindsOnlyListsLastChangedBeforeIt()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var lists = await SeedAsync(ctx);
         var cutoff = DateTime.UtcNow.AddHours(-48);
         await ctx.SetDatesAsync(lists["guest old"], modifiedDate: cutoff.AddMinutes(-1));
@@ -90,7 +90,7 @@ public class CompareListSearchServiceComponentTests
     {
         // The cleanup pages through lists in this order, and the X-API takes the first list of a key: both need it
         // stable, so a race that left two lists for one key always resolves to the same one.
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var lists = await SeedAsync(ctx);
         var now = DateTime.UtcNow;
         var order = new[] { "guest fresh", "buyer-2 org-1", "buyer-1 org-2", "guest old", "buyer-1 other store", "buyer-1 org-1" };
@@ -110,7 +110,7 @@ public class CompareListSearchServiceComponentTests
     [Fact]
     public async Task ExplicitSort_OverridesTheDefault()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var lists = await SeedAsync(ctx);
         await ctx.SetDatesAsync(lists["guest old"], modifiedDate: DateTime.UtcNow.AddDays(-5));
         await ctx.SetDatesAsync(lists["guest fresh"], modifiedDate: DateTime.UtcNow.AddDays(-1));

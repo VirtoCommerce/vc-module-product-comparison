@@ -35,7 +35,7 @@ public class CompareListGraphQlComponentTests
     [Fact]
     public async Task Guest_SavesQueriesMovesAndClearsTheirList()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
 
         // The first save creates the guest's list, under the guest's id, without an organization.
         var saved = (await ctx.ExecuteAsGuestAsync(SaveProducts(GuestId, "printer-1@printers", "printer-2@printers"))).Data("saveProductsToCompareList");
@@ -85,7 +85,7 @@ public class CompareListGraphQlComponentTests
     [Fact]
     public async Task Guest_RemovesItemsAndClearsOneCategory()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var saved = (await ctx.ExecuteAsGuestAsync(SaveProducts(GuestId, "printer-1@printers", "printer-2@printers", "laptop-1@laptops", "mouse-1"))).Data("saveProductsToCompareList");
 
         var removed = (await ctx.ExecuteAsGuestAsync(Mutation("removeCompareListItems", GuestId, $"""itemIds: ["{ItemId(saved, "printer-1")}"]"""))).Data("removeCompareListItems");
@@ -106,7 +106,7 @@ public class CompareListGraphQlComponentTests
     {
         // The storefront renders the list a mutation returns until it next queries, so the two must agree: a
         // category added later comes after the earlier ones, and a new item carries the date it was added.
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         await ctx.ExecuteAsGuestAsync(SaveProducts(GuestId, "printer-1@printers"));
 
         var added = (await ctx.ExecuteAsGuestAsync(SaveProducts(GuestId, "laptop-1@laptops"))).Data("saveProductsToCompareList");
@@ -120,7 +120,7 @@ public class CompareListGraphQlComponentTests
     [Fact]
     public async Task ConfiguredProduct_KeepsItsSections_AndEachConfigurationIsAnItemOfItsOwn()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         const string inkBlackWithEngraving = """
             { sectionId: "ink" type: "Product" option: { productId: "ink-black" quantity: 2 } }
             { sectionId: "engraving" type: "Text" customText: "To the team" }
@@ -164,7 +164,7 @@ public class CompareListGraphQlComponentTests
         // The handlers validate before they touch a list, so a caller outside GraphQL gets the same rules: a File
         // section (the storefront never compares uploads) and an empty product list are refused with VALIDATION,
         // and no list is created. An empty user id doesn't get that far: the gate refuses it first.
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         const string fileSection = """{ sectionId: "logo" type: "File" fileUrls: ["https://example.com/logo.png"] }""";
 
         var fileResponse = await ctx.ExecuteAsGuestAsync(Mutation("saveProductsToCompareList", GuestId, $$"""products: [{ productId: "printer-1" configurationSections: [{{fileSection}}] }]"""));
@@ -192,7 +192,7 @@ public class CompareListGraphQlComponentTests
         // item ids or configuration sections in all than a list can hold, and a bounded number of sections for a
         // product, each chosen once. A refused call builds and stores nothing. The call with too many sections in all
         // has none too many for any one product: the cap on the whole call refuses it, before the list is even loaded.
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var tooManyProducts = string.Join(" ", Enumerable.Range(0, ModuleConstants.MaxListItems + 1).Select(i => $$"""{ productId: "product-{{i}}" }"""));
         var tooManySections = string.Join(" ", Enumerable.Range(0, ModuleConstants.MaxConfigurationSections + 1).Select(i => $$"""{ sectionId: "section-{{i}}" type: "Text" customText: "text" }"""));
         var fullConfiguration = string.Join(" ", Enumerable.Range(0, ModuleConstants.MaxConfigurationSections).Select(i => $$"""{ sectionId: "section-{{i}}" type: "Text" customText: "text" }"""));
@@ -220,13 +220,16 @@ public class CompareListGraphQlComponentTests
     public async Task ConfiguredItem_ShowsEachSectionAsTheCatalogHasItNow()
     {
         // Only the buyer's choices are stored; the section itself (name, options) comes from X-Cart's product
-        // configuration query when the list is read. The loader asks once per configurable product, for the sections
-        // its compared items use, so two configurations of one printer cost one query. A section the catalog no
-        // longer has comes back null, and the storefront drops its row.
-        var configurations = new TestProductConfigurationHandler();
-        configurations.Add("printer-1", ("ink", "Ink"), ("engraving", "Engraving"), ("paper", "Paper"));
-        using var ctx = ProductComparisonTestContext.Create(services =>
-            services.AddSingleton<IRequestHandler<GetProductConfigurationQuery, ProductConfigurationQueryResponse>>(configurations));
+        // configuration query when the list is read, answered from the catalog. The loader asks once per configurable
+        // product, for the sections its compared items use, so two configurations of one printer cost one query. A
+        // section the catalog no longer has comes back null, and the storefront drops its row.
+        var configurationQueries = new SentRequests<GetProductConfigurationQuery, ProductConfigurationQueryResponse>();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync(services =>
+            services.AddSingleton<IPipelineBehavior<GetProductConfigurationQuery, ProductConfigurationQueryResponse>>(configurationQueries));
+        await ctx.Catalog.InitializeAsync();
+        var printers = await ctx.Catalog.AddCategoryAsync("printers", "Printers");
+        await ctx.Catalog.AddProductAsync("printer-1", "Printer 1", printers, 100m);
+        await ctx.Catalog.AddConfigurationAsync("printer-1", ("ink", "Ink"), ("engraving", "Engraving"), ("paper", "Paper"));
         const string inkAndEngraving = """
             { sectionId: "ink" type: "Product" option: { productId: "ink-black" quantity: 1 } }
             { sectionId: "engraving" type: "Text" customText: "To the team" }
@@ -246,7 +249,7 @@ public class CompareListGraphQlComponentTests
             .ToList();
         sections[0].Should().Equal("engraving: Engraving", "ink: Ink");
         sections[1].Should().Equal("gift-wrap: (none)", "ink: Ink");
-        var query = configurations.Queries.Should().ContainSingle().Subject;
+        var query = configurationQueries.Requests.Should().ContainSingle().Subject;
         (query.ConfigurableProductId, query.StoreId, query.UserId).Should().Be(("printer-1", ProductComparisonTestContext.StoreId, GuestId));
         query.SectionIds.Should().BeEquivalentTo("engraving", "gift-wrap", "ink");
     }
@@ -256,7 +259,7 @@ public class CompareListGraphQlComponentTests
     {
         // Another module can send the commands through MediatR without the GraphQL builders. The handlers validate,
         // so such a caller gets the same rules: here a File section, which the list never stores.
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var command = new SaveProductsToCompareListCommand
         {
             StoreId = ProductComparisonTestContext.StoreId,

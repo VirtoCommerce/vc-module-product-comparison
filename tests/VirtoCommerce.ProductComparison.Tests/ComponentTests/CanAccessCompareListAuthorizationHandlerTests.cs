@@ -1,33 +1,37 @@
-using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
-using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using VirtoCommerce.Platform.Core;
-using VirtoCommerce.Platform.Core.Security;
 using VirtoCommerce.ProductComparison.Core.Models;
+using VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure;
 using VirtoCommerce.ProductComparison.Xapi.Authorization;
 using Xunit;
 
-namespace VirtoCommerce.ProductComparison.Tests.UnitTests;
+namespace VirtoCommerce.ProductComparison.Tests.ComponentTests;
 
 /// <summary>
 /// Who may use a compare list (VCST-5918), the guest-cart rule: a signed-in buyer only their own user id, a guest
 /// only an id no registered user has, an administrator any. A merge source must be a guest list or the caller's own.
+/// The handler is the one the module registers, and the registered user an account of the platform's security
+/// database (<see cref="ProductComparisonTestContext"/>).
 /// </summary>
-[Trait("Category", "Unit")]
-public class CanAccessCompareListAuthorizationHandlerTests
+[Trait("Category", "Component")]
+public class CanAccessCompareListAuthorizationHandlerTests : IAsyncLifetime
 {
     private const string RegisteredUserId = "registered-user";
 
-    public CanAccessCompareListAuthorizationHandlerTests()
+    private ProductComparisonTestContext _ctx;
+
+    public async ValueTask InitializeAsync()
     {
-        // The platform sets this at startup; GetUserId() finds nothing without it.
-        ClaimsPrincipalExtensions.UserIdClaimTypes = [ClaimTypes.NameIdentifier];
+        _ctx = await ProductComparisonTestContext.CreateAsync();
+        await _ctx.AddUserAsync(RegisteredUserId);
     }
+
+    public ValueTask DisposeAsync() => _ctx.DisposeAsync();
 
     [Fact]
     public async Task SignedInBuyer_MayUseOnlyTheirOwnUserId()
@@ -93,11 +97,11 @@ public class CanAccessCompareListAuthorizationHandlerTests
         (await AuthorizeAsync(Anonymous(), List(userId: "some-guest", isAnonymous: true))).Should().BeFalse();
     }
 
-    private static async Task<bool> AuthorizeAsync(ClaimsPrincipal user, object resource)
+    private async Task<bool> AuthorizeAsync(ClaimsPrincipal user, object resource)
     {
-        var requirement = new CanAccessCompareListAuthorizationRequirement();
-        var handler = new CanAccessCompareListAuthorizationHandler(() => CreateUserManager(RegisteredUserId));
-        var context = new AuthorizationHandlerContext([requirement], user, resource);
+        // The handler as the module registers it, over the platform's accounts.
+        var handler = _ctx.GetRequiredService<IEnumerable<IAuthorizationHandler>>().OfType<CanAccessCompareListAuthorizationHandler>().Single();
+        var context = new AuthorizationHandlerContext([new CanAccessCompareListAuthorizationRequirement()], user, resource);
 
         await handler.HandleAsync(context);
 
@@ -125,41 +129,5 @@ public class CanAccessCompareListAuthorizationHandlerTests
     private static CompareList List(string userId, bool isAnonymous)
     {
         return new CompareList { Id = "list", StoreId = "store", UserId = userId, IsAnonymous = isAnonymous };
-    }
-
-    private static UserManager<ApplicationUser> CreateUserManager(params string[] registeredUserIds)
-    {
-        return new UserManager<ApplicationUser>(new UserStore(registeredUserIds), null, null, null, null, null, null, null, null);
-    }
-
-    /// <summary>Only FindByIdAsync is used: the guest rule asks whether a registered user has the id.</summary>
-    private sealed class UserStore(string[] userIds) : IUserStore<ApplicationUser>
-    {
-        public Task<ApplicationUser> FindByIdAsync(string userId, CancellationToken cancellationToken)
-        {
-            return Task.FromResult(userIds.Contains(userId) ? new ApplicationUser { Id = userId } : null);
-        }
-
-        public Task<ApplicationUser> FindByNameAsync(string normalizedUserName, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task<string> GetUserIdAsync(ApplicationUser user, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task<string> GetUserNameAsync(ApplicationUser user, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task SetUserNameAsync(ApplicationUser user, string userName, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task<string> GetNormalizedUserNameAsync(ApplicationUser user, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task SetNormalizedUserNameAsync(ApplicationUser user, string normalizedName, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task<IdentityResult> CreateAsync(ApplicationUser user, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task<IdentityResult> UpdateAsync(ApplicationUser user, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task<IdentityResult> DeleteAsync(ApplicationUser user, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public void Dispose()
-        {
-        }
     }
 }

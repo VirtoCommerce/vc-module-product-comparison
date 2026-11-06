@@ -5,8 +5,8 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using VirtoCommerce.ProductComparison.Core;
 using VirtoCommerce.ProductComparison.Data.Models;
-using VirtoCommerce.ProductComparison.Xapi;
 using VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure;
+using VirtoCommerce.ProductComparison.Xapi;
 using Xunit;
 using static VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure.CompareListDocuments;
 
@@ -25,8 +25,8 @@ public class CompareListMergeGraphQlTests
     [Fact]
     public async Task SignedInBuyer_TakesTheGuestListOver_AndTheGuestListIsGone()
     {
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
         var guestListId = await SaveGuestListAsync(ctx, ProductComparisonTestContext.StoreId, "printer-1@printers", "laptop-1@laptops");
         await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-2@printers"));
 
@@ -51,7 +51,7 @@ public class CompareListMergeGraphQlTests
     [Fact]
     public async Task Merge_Anonymously_IsRefused()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var guestListId = await SaveGuestListAsync(ctx, ProductComparisonTestContext.StoreId, "printer-1@printers");
 
         // Another guest, or the guest itself: a merge needs a signed-in account to merge into.
@@ -68,8 +68,8 @@ public class CompareListMergeGraphQlTests
     {
         // A guest list belongs to the store it was built in; merging it into another store's list is a no-op that
         // leaves both lists as they were.
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
         var otherStoreListId = await SaveGuestListAsync(ctx, ProductComparisonTestContext.OtherStoreId, "printer-1@printers");
         await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-2@printers"));
 
@@ -83,9 +83,9 @@ public class CompareListMergeGraphQlTests
     public async Task Merge_AnotherBuyersList_IsRefused()
     {
         // The source must be a guest list or the caller's own; a registered buyer's list id is not a way in.
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
-        ctx.Users.Add("buyer-2");
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
+        await ctx.AddUserAsync("buyer-2");
         var buyer2ListId = (await ctx.ExecuteAsBuyerAsync("buyer-2", SaveProducts("buyer-2", "printer-1@printers"))).Data("saveProductsToCompareList").GetProperty("id").GetString();
 
         var merged = await ctx.ExecuteAsBuyerAsync("buyer-1", Merge(buyer2ListId));
@@ -101,8 +101,8 @@ public class CompareListMergeGraphQlTests
     {
         // Without its own check, the merge would take the list's items over from itself and then delete the "source":
         // the buyer's whole list.
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
         var saved = (await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-1@printers", "laptop-1@laptops"))).Data("saveProductsToCompareList");
 
         var merged = (await ctx.ExecuteAsBuyerAsync("buyer-1", Merge(saved.GetProperty("id").GetString()))).Data("mergeCompareList");
@@ -117,8 +117,8 @@ public class CompareListMergeGraphQlTests
         // The account list is at the 500-product cap (100 categories of 5) and the guest compared a product in a
         // category of its own: nothing older can make room. The merge is refused with a code the storefront can tell
         // from a failed request, and neither list changes: the guest's products are not deleted unseen.
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
         var accountProducts = Enumerable.Range(0, ModuleConstants.MaxListItems).Select(i => $"p{i}@category{i / 5}").ToArray();
         await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", accountProducts));
         var guestListId = await SaveGuestListAsync(ctx, ProductComparisonTestContext.StoreId, "guest-product@new-category");

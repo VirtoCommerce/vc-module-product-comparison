@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure;
 using VirtoCommerce.ProductComparison.Tests.StorefrontE2E.Infrastructure;
 using ProductComparisonSettings = VirtoCommerce.ProductComparison.Core.ModuleConstants.Settings;
@@ -10,6 +11,6 @@ namespace VirtoCommerce.ProductComparison.Tests.StorefrontE2E.GuestListsOff;
 /// </summary>
 public sealed class GuestListsOffEnvironment : StorefrontEnvironment
 {
-    private protected override void ConfigureStore(ProductComparisonTestContext context)
-        => context.SetStoreSetting(InProcessBackend.StoreId, ProductComparisonSettings.General.AnonymousListEnabled, false);
+    private protected override Task ConfigureStoreAsync(ProductComparisonTestContext context)
+        => context.SetStoreSettingAsync(InProcessBackend.StoreId, ProductComparisonSettings.General.AnonymousListEnabled, false);
 }

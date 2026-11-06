@@ -161,6 +161,103 @@ public sealed class GuestCompareTests(GuestCompareEnvironment env)
     }
 
     /// <summary>
+    /// Deep test C1.3 and C2.1: the compare toggle on a catalog card, the main way buyers add a product. The host's
+    /// product cards are a place of their own for the plugin's productActions slot, fed by the category page's product
+    /// search: X-Catalog's search over the index, whose results carry the breadcrumbs the plugin takes the compare
+    /// category from. A guest on the Laser printers page adds one card's product; the toast gives the category's room
+    /// left, the header counts it, the other card stays as it was, and the server stores it in that category.
+    /// </summary>
+    [Fact(Timeout = 300_000)]
+    public async Task Guest_AddsAProductFromItsCatalogCard()
+    {
+        var guestId = StorefrontEnvironment.NewGuestId();
+        await using var session = await env.OpenAsGuestAsync(guestId, CategoryPage(LaserPrintersId));
+
+        await session.RunAsync(nameof(Guest_AddsAProductFromItsCatalogCard), async page =>
+        {
+            var card = ProductCard(page, LaserJet200Name);
+            await AddToCompare(card).ClickAsync(new() { Timeout = 60_000 });
+
+            await Expect(RemoveFromCompare(card)).ToHaveAttributeAsync("aria-pressed", "true");
+            await Expect(Toasts(page)).ToContainTextAsync("is added to compare list (items left - 4)");
+            await Expect(HeaderCompareLink(page, 1)).ToBeVisibleAsync();
+            await Expect(AddToCompare(ProductCard(page, LaserJet100Name))).ToHaveAttributeAsync("aria-pressed", "false");
+
+            session.GraphQlErrors.Should().BeEmpty();
+        });
+
+        var list = (await env.GetListsAsync(guestId)).Should().ContainSingle().Subject;
+        list.Items.Select(x => (x.ProductId, x.CategoryId)).Should().Equal((LaserJet200Id, LaserPrintersId));
+    }
+
+    /// <summary>
+    /// Deep test C5.7: "Add to cart" in the compare table puts a plain product in the cart through the host's
+    /// useShortCart, which the plugin's specs only mock, and across the facade the plugin is built against (0.2.8) and
+    /// the one the storefront runs (0.2.10). The add goes through X-Cart's own addItem: the toast names the product, the
+    /// header's cart counts it, and the guest's cart holds one of it. The compare list doesn't change.
+    /// </summary>
+    [Fact(Timeout = 300_000)]
+    public async Task AddToCart_FromTheComparePage_PutsTheProductInTheCart()
+    {
+        var guestId = StorefrontEnvironment.NewGuestId();
+        await env.SaveAsGuestAsync(guestId, $"{LaserJet100Id}@{LaserPrintersId}");
+
+        await using var session = await env.OpenAsGuestAsync(guestId, ComparePage);
+
+        await session.RunAsync(nameof(AddToCart_FromTheComparePage_PutsTheProductInTheCart), async page =>
+        {
+            var column = ProductColumn(page, LaserJet100Name);
+            await AddToCartButton(column).ClickAsync(new() { Timeout = 60_000 });
+
+            await Expect(Toasts(page)).ToContainTextAsync($"Added {LaserJet100Name} to cart");
+            await Expect(HeaderCartLink(page, 1)).ToBeVisibleAsync();
+
+            session.Operations.Should().Contain("AddItem");
+            session.GraphQlErrors.Should().BeEmpty();
+        });
+
+        var cart = (await env.GetCartsAsync(guestId)).Should().ContainSingle().Subject;
+        cart.Items.Select(x => (x.ProductId, x.Quantity)).Should().Equal((LaserJet100Id, 1));
+        (await env.GetListsAsync(guestId)).Should().ContainSingle().Which.Items.Select(x => x.ProductId).Should().Equal(LaserJet100Id);
+    }
+
+    /// <summary>
+    /// Deep test C4.2: a category at the store's limit (5 by default) takes no more. The plugin refuses the sixth
+    /// product itself, before any request, with "Only 5 products from the same category can be compared": the toggle
+    /// stays off, nothing is sent, and the list still holds the five.
+    /// </summary>
+    [Fact(Timeout = 300_000)]
+    public async Task AFullCategory_RefusesTheSixthProduct_WithoutARequest()
+    {
+        var guestId = StorefrontEnvironment.NewGuestId();
+        await env.SaveAsGuestAsync(guestId,
+        [
+            $"{LaserJet200Id}@{LaserPrintersId}",
+            .. Enumerable.Range(1, 4).Select(i => $"e2e-made-up-printer-{i}@{LaserPrintersId}"),
+        ]);
+
+        await using var session = await env.OpenAsGuestAsync(guestId, ProductPage(LaserJet100Id));
+
+        await session.RunAsync(nameof(AFullCategory_RefusesTheSixthProduct_WithoutARequest), async page =>
+        {
+            // The list has loaded (the header counts it), so the plugin knows the category is full.
+            await Expect(HeaderCompareLink(page, 5)).ToBeVisibleAsync(new() { Timeout = 60_000 });
+
+            await AddToCompare(page).ClickAsync();
+
+            await Expect(Toasts(page)).ToContainTextAsync("Only 5 products from the same category can be compared");
+            await Expect(AddToCompare(page)).ToHaveAttributeAsync("aria-pressed", "false");
+            await Expect(HeaderCompareLink(page, 5)).ToBeVisibleAsync();
+
+            session.Operations.Should().NotContain("SaveProductsToCompareList");
+            session.GraphQlErrors.Should().BeEmpty();
+        });
+
+        var list = (await env.GetListsAsync(guestId)).Should().ContainSingle().Subject;
+        list.Items.Should().HaveCount(5).And.NotContain(x => x.ProductId == LaserJet100Id);
+    }
+
+    /// <summary>
     /// Deep test C5.6: "Clear category" asks for confirmation, naming the category and its count, then empties that
     /// category alone, through the plugin's own clearCompareListCategory: the one compare-list operation of the plugin
     /// that no other E2E test sends, so its document meets the server's schema only here. The page moves to the category

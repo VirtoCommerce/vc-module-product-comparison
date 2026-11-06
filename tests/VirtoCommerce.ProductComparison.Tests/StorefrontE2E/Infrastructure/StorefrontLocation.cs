@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using VirtoCommerce.ProductComparison.Tests.Infrastructure;
 
 namespace VirtoCommerce.ProductComparison.Tests.StorefrontE2E.Infrastructure;
 
@@ -26,7 +27,7 @@ internal sealed class StorefrontLocation
         Environment.GetEnvironmentVariable(BuildVariable),
         Environment.GetEnvironmentVariable(SourceVariable),
         // the module's Web project -> src -> repo
-        Path.GetFullPath(Path.Combine(StorefrontPlugin.ModuleDirectory, "..", ".."))));
+        Path.GetFullPath(Path.Combine(TestedModule.Directory, "..", ".."))));
 
     private StorefrontLocation(string buildDirectory, string sourceDirectory)
     {

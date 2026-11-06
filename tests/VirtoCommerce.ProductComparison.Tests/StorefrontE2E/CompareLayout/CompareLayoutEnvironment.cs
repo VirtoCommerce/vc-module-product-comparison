@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using VirtoCommerce.CatalogModule.Core.Model;
+using VirtoCommerce.ProductComparison.Tests.Infrastructure;
 using VirtoCommerce.ProductComparison.Tests.StorefrontE2E.Infrastructure;
 
 namespace VirtoCommerce.ProductComparison.Tests.StorefrontE2E.CompareLayout;
@@ -40,6 +41,11 @@ public sealed class CompareLayoutEnvironment : StorefrontEnvironment
         UnbrokenCategoryName, "Toner and ink cartridges", "Label printers", "Document scanners", "Paper shredders", "Laminators", "Projectors",
     ];
 
+    private static readonly string[] _propertyNames =
+    [
+        NotesLabel, "Model number", LongLabel, "Print speed", "Resolution", "Connectivity", "Paper capacity", "Duplex printing", "Weight", "Dimensions", "Warranty", "Color",
+    ];
+
     /// <summary>The guest whose list the tests that only look open.</summary>
     public string GuestId { get; } = NewGuestId();
 
@@ -50,55 +56,52 @@ public sealed class CompareLayoutEnvironment : StorefrontEnvironment
     public static IReadOnlyList<string> StressItems { get; } =
         [.. new[] { "long", "north", "south", "unbroken" }.Select(x => $"e2e-layout-{x}@{LongCategoryId}"), $"{DiscontinuedId}@{LongCategoryId}"];
 
-    private protected override async Task SeedAsync(StorefrontCatalog catalog)
+    private protected override async Task SeedAsync(TestCatalog catalog)
     {
-        var top = catalog.AddCategory("e2e-layout-office", "Office equipment");
-        var category = catalog.AddCategory(LongCategoryId, LongCategoryName, top);
+        var top = await catalog.AddCategoryAsync("e2e-layout-office", "Office equipment");
+        var category = await catalog.AddCategoryAsync(LongCategoryId, LongCategoryName, top);
         for (var i = 0; i < _otherCategories.Length; i++)
         {
-            catalog.AddCategory($"e2e-layout-category-{i}", _otherCategories[i], top);
+            await catalog.AddCategoryAsync($"e2e-layout-category-{i}", _otherCategories[i], top);
         }
 
-        AddStressProduct(catalog, "e2e-layout-long", LongName, category, 12_345_678.99m, sku: null, model: "MFP-4100", notes: LongNotes);
-        AddStressProduct(catalog, "e2e-layout-north", NorthName, category, 9_876_543.21m, sku: UnbrokenSku, model: UnbrokenModel, notes: "Ships from the north warehouse.");
-        AddStressProduct(catalog, "e2e-layout-south", SouthName, category, 9_876_543.29m, sku: null, model: "MFP-4100S", notes: LongNotes);
-        AddStressProduct(catalog, "e2e-layout-unbroken", UnbrokenName, category, 1_000_000m, sku: null, model: "MFP-4100U", notes: "Ships from the south warehouse.");
+        // The table shows a row per property: the long ones, plus ten more so that the page scrolls at every width.
+        var properties = new Dictionary<string, Property>();
+        foreach (var name in _propertyNames)
+        {
+            properties[name] = await catalog.AddPropertyAsync(name);
+        }
+
+        await AddStressProductAsync(catalog, properties, "e2e-layout-long", LongName, category, 12_345_678.99m, sku: null, model: "MFP-4100", notes: LongNotes);
+        await AddStressProductAsync(catalog, properties, "e2e-layout-north", NorthName, category, 9_876_543.21m, sku: UnbrokenSku, model: UnbrokenModel, notes: "Ships from the north warehouse.");
+        await AddStressProductAsync(catalog, properties, "e2e-layout-south", SouthName, category, 9_876_543.29m, sku: null, model: "MFP-4100S", notes: LongNotes);
+        await AddStressProductAsync(catalog, properties, "e2e-layout-unbroken", UnbrokenName, category, 1_000_000m, sku: null, model: "MFP-4100U", notes: "Ships from the south warehouse.");
 
         await SaveAsGuestAsync(GuestId, [.. StressItems, .. OtherCategoryItems]);
     }
 
-    // The table shows a row per property: the long ones, plus ten more so that the page scrolls at every width.
-    private static void AddStressProduct(StorefrontCatalog catalog, string id, string name, Category category, decimal price, string sku, string model, string notes)
-    {
-        var product = catalog.AddProduct(id, name, category, price);
-        if (sku != null)
+    private static Task AddStressProductAsync(TestCatalog catalog, Dictionary<string, Property> properties, string id, string name, Category category, decimal price, string sku, string model, string notes)
+        => catalog.AddProductAsync(id, name, category, price, product =>
         {
-            product.Code = sku;
-        }
+            if (sku != null)
+            {
+                product.Code = sku;
+            }
 
-        product.Properties =
-        [
-            TextProperty(NotesLabel, notes),
-            TextProperty("Model number", model),
-            TextProperty(LongLabel, $"{id.Length * 1_000:N0} pages"),
-            TextProperty("Print speed", $"{id.Length + 30} pages per minute"),
-            TextProperty("Resolution", "1200 x 1200 dpi"),
-            TextProperty("Connectivity", "USB 2.0, Ethernet, Wi-Fi Direct"),
-            TextProperty("Paper capacity", $"{id.Length * 10} sheets"),
-            TextProperty("Duplex printing", "Automatic"),
-            TextProperty("Weight", $"{id.Length + 10} kg"),
-            TextProperty("Dimensions", "420 x 390 x 330 mm"),
-            TextProperty("Warranty", $"{id.Length % 3 + 1} years"),
-            TextProperty("Color", "Black and white"),
-        ];
-    }
-
-    private static Property TextProperty(string name, string value) => new()
-    {
-        Id = $"e2e-layout-property-{name.ToLowerInvariant().Replace(' ', '-')}",
-        Name = name,
-        Type = PropertyType.Product,
-        ValueType = PropertyValueType.ShortText,
-        Values = [new PropertyValue { PropertyName = name, Value = value, ValueType = PropertyValueType.ShortText }],
-    };
+            product.Properties =
+            [
+                TestCatalog.WithValue(properties[NotesLabel], notes),
+                TestCatalog.WithValue(properties["Model number"], model),
+                TestCatalog.WithValue(properties[LongLabel], $"{id.Length * 1_000:N0} pages"),
+                TestCatalog.WithValue(properties["Print speed"], $"{id.Length + 30} pages per minute"),
+                TestCatalog.WithValue(properties["Resolution"], "1200 x 1200 dpi"),
+                TestCatalog.WithValue(properties["Connectivity"], "USB 2.0, Ethernet, Wi-Fi Direct"),
+                TestCatalog.WithValue(properties["Paper capacity"], $"{id.Length * 10} sheets"),
+                TestCatalog.WithValue(properties["Duplex printing"], "Automatic"),
+                TestCatalog.WithValue(properties["Weight"], $"{id.Length + 10} kg"),
+                TestCatalog.WithValue(properties["Dimensions"], "420 x 390 x 330 mm"),
+                TestCatalog.WithValue(properties["Warranty"], $"{id.Length % 3 + 1} years"),
+                TestCatalog.WithValue(properties["Color"], "Black and white"),
+            ];
+        });
 }

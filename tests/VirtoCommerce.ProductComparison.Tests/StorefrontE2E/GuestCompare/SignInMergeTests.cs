@@ -26,7 +26,7 @@ public sealed class SignInMergeTests(GuestCompareEnvironment env)
     public async Task SigningIn_MergesTheGuestsList_IntoTheBuyers()
     {
         var guestId = StorefrontEnvironment.NewGuestId();
-        var buyerId = env.NewBuyer();
+        var buyerId = await env.NewBuyerAsync();
 
         await using var session = await env.OpenAsGuestAsync(guestId, ProductPage(LaserJet200Id));
 
@@ -83,7 +83,7 @@ public sealed class SignInMergeTests(GuestCompareEnvironment env)
     {
         var name = $"{nameof(AMergeThatFailsOnItsWay_KeepsTheGuestsList_AndTheNextLoadMergesIt)}_{failure.Replace(' ', '_')}";
         var guestId = StorefrontEnvironment.NewGuestId();
-        var buyerId = env.NewBuyer();
+        var buyerId = await env.NewBuyerAsync();
         var guestListId = await env.SaveAsGuestAsync(guestId, $"{LaserJet200Id}@{LaserPrintersId}");
 
         await using var session = await env.OpenAsGuestAsync(guestId, ProductPage(LaserJet200Id));
@@ -164,7 +164,7 @@ public sealed class SignInMergeTests(GuestCompareEnvironment env)
     public async Task SigningIn_IntoAFullList_TellsTheBuyer_AndKeepsBothLists()
     {
         var guestId = StorefrontEnvironment.NewGuestId();
-        var buyerId = env.NewBuyer();
+        var buyerId = await env.NewBuyerAsync();
 
         // The buyer's list at the cap, in one save: 100 made-up categories of 5 made-up products. 500 is also the most
         // one call may carry.
@@ -212,10 +212,10 @@ public sealed class SignInMergeTests(GuestCompareEnvironment env)
     /// in localStorage.auth, the guest's user-id dropped. (The sign-in page itself is not driven: it posts the password
     /// grant, which this backend's token endpoint doesn't implement.) The next load is the buyer's first.
     /// </summary>
-    private Task SignInAsync(StorefrontSession session, string buyerId)
-        => session.Page.EvaluateAsync(
+    private async Task SignInAsync(StorefrontSession session, string buyerId)
+        => await session.Page.EvaluateAsync(
             "auth => { localStorage.setItem('auth', auth); localStorage.removeItem('user-id'); }",
-            env.IssueToken(buyerId).ToLocalStorageJson());
+            (await env.IssueTokenAsync(buyerId)).ToLocalStorageJson());
 
     /// <summary>A request that fails on its way: aborted, as when the network drops, or answered by a gateway's error page.</summary>
     private static Task FailAsync(IRoute route, string failure) => failure switch

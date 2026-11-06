@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using VirtoCommerce.ProductComparison.Tests.Infrastructure;
 
 namespace VirtoCommerce.ProductComparison.Tests.StorefrontE2E.Infrastructure;
 
@@ -24,7 +25,7 @@ internal static class StorefrontDocuments
         => Load(Path.Combine(StorefrontLocation.Current.SourceDirectory, "client-app", "core", "api", "graphql"), relativePath, installedModules);
 
     public static string LoadPlugin(string relativePath)
-        => Load(Path.Combine(StorefrontPlugin.ModuleDirectory, "StorefrontApp", "src", "api", "graphql"), relativePath, []);
+        => Load(Path.Combine(TestedModule.Directory, "StorefrontApp", "src", "api", "graphql"), relativePath, []);
 
     private static string Load(string root, string relativePath, IReadOnlyCollection<string> installedModules)
     {

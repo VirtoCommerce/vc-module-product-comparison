@@ -24,7 +24,7 @@ public class ProductChangedEventHandlerComponentTests
     [Fact]
     public async Task DeletedProduct_LeavesEveryList()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var guestList = await ctx.SaveAsync(GuestList("guest-1", items: [Item("printer-1", "printers", 0), Item("printer-2", "printers", 1)]));
         var buyerList = await ctx.SaveAsync(AccountList("buyer-1", organizationId: "org-1", storeId: ProductComparisonTestContext.OtherStoreId, items:
         [
@@ -48,7 +48,7 @@ public class ProductChangedEventHandlerComponentTests
     {
         // Only a deletion removes items: an edit (a new price, a product hidden from the store) keeps them, and a
         // product shown as "no longer available" is the storefront's call, not this handler's.
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var list = await ctx.SaveAsync(GuestList("guest-1", items: [Item("printer-1", "printers", 0), Item("printer-2", "printers", 1)]));
 
         await ctx.PublishProductChangedAsync(EntryState.Modified, "printer-1");
@@ -60,7 +60,7 @@ public class ProductChangedEventHandlerComponentTests
     [Fact]
     public async Task AfterADeletion_TheCachesNoLongerServeTheRemovedItems()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var list = await ctx.SaveAsync(GuestList("guest-1", items: [Item("printer-1", "printers", 0), Item("printer-2", "printers", 1)]));
         var criteria = new CompareListSearchCriteria { StoreId = ProductComparisonTestContext.StoreId, UserId = "guest-1", OrganizationIdIsEmpty = true, Take = 1 };
 

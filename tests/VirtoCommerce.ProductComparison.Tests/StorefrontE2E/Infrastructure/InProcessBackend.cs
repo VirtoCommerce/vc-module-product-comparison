@@ -1,7 +1,6 @@
 using System;
 using System.Linq;
 using System.Net.Http;
-using System.Net.Http.Json;
 using System.Threading.Tasks;
 using GraphQL.Types;
 using Microsoft.AspNetCore.Builder;
@@ -11,15 +10,15 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure;
+using VirtoCommerce.ProductComparison.Tests.Infrastructure;
 
 namespace VirtoCommerce.ProductComparison.Tests.StorefrontE2E.Infrastructure;
 
 /// <summary>
 /// The component harness hosted as a real HTTP backend inside the test process: the same
-/// <see cref="ProductComparisonTestContext"/> (the module's own Module.Initialize over in-memory SQLite, hand-written
-/// doubles for stores, accounts and settings) behind Kestrel on a loopback port, so the real storefront talks to it
-/// while the tests seed and assert through the very same services and DbContext. No second dotnet process, nothing
-/// read from <c>back/modules</c>.
+/// <see cref="ProductComparisonTestContext"/> (the module and the platform around it, as they start up, over in-memory
+/// SQLite) behind Kestrel on a loopback port, so the real storefront talks to it while the tests seed and assert
+/// through the very same services and databases. No second dotnet process, nothing read from <c>back/modules</c>.
 /// </summary>
 internal sealed class InProcessBackend : IAsyncDisposable
 {
@@ -47,7 +46,7 @@ internal sealed class InProcessBackend : IAsyncDisposable
 
     public TestTokenService Tokens => Context.GetRequiredService<TestTokenService>();
 
-    public StorefrontCatalog Catalog => Context.GetRequiredService<StorefrontCatalog>();
+    public TestCatalog Catalog => Context.Catalog;
 
     /// <summary>
     /// Runs test-side work against the harness between requests. Its in-memory SQLite database lives on one
@@ -63,9 +62,9 @@ internal sealed class InProcessBackend : IAsyncDisposable
         WebApplication app = null;
         var gate = new RequestGate();
 
-        var context = ProductComparisonTestContext.Create(
-            configureOverrides: StorefrontServices.AddStorefrontShell,
-            providerFactory: services =>
+        var context = await ProductComparisonTestContext.CreateAsync(
+            configureServices: StorefrontServices.AddStorefrontShell,
+            buildHost: services =>
             {
                 var builder = WebApplication.CreateBuilder(new WebApplicationOptions { ApplicationName = "VirtoCommerce.ProductComparison.StorefrontE2E" });
                 builder.Logging.SetMinimumLevel(LogLevel.Warning);
@@ -81,11 +80,12 @@ internal sealed class InProcessBackend : IAsyncDisposable
                 app = builder.Build();
                 StorefrontServices.ConfigurePipeline(app, gate, storefrontBuild);
 
-                // Not started yet: the harness still subscribes the module's event handler on this provider.
-                return app.Services;
+                // Not started yet: the platform's and the modules' startup still adds their endpoints to it.
+                return app;
             });
 
-        StorefrontServices.ConfigureStore(context);
+        await StorefrontShellModules.PostInitializeAsync(app);
+        await context.Catalog.InitializeAsync();
 
         // Eagerly, so a graph type whose dependency is missing fails here with the DI message, not as an opaque
         // "Error executing document" on the storefront's first request.
@@ -108,7 +108,7 @@ internal sealed class InProcessBackend : IAsyncDisposable
     private async Task SelfCheckAsync()
     {
         using var client = new HttpClient { BaseAddress = new Uri(Url) };
-        var response = await client.PostAsJsonAsync("/graphql", new
+        var response = await GraphQlHttp.PostAsync(client, new
         {
             query = "{ store(domain: \"127.0.0.1\") { storeId settings { modules { moduleId settings { name value } } } plugins(appId: \"vc-frontend\") { id } } }",
         });
@@ -125,8 +125,8 @@ internal sealed class InProcessBackend : IAsyncDisposable
         await _app.StopAsync();
         await _app.DisposeAsync();
 
-        // The provider was the app's and is gone; this closes the in-memory SQLite connection.
-        Context.Dispose();
+        // The provider was the app's: its databases went with it.
+        await Context.DisposeAsync();
         _gate.Dispose();
     }
 }

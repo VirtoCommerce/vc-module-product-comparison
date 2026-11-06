@@ -27,8 +27,8 @@ public class CompareListAccessGraphQlTests
     public async Task Guest_UsingARegisteredUsersId_IsRefused()
     {
         // Otherwise anyone who learned a buyer's id could read and edit that buyer's list without signing in.
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
         await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-1@printers"));
 
         var query = await ctx.ExecuteAsGuestAsync(Query("buyer-1"));
@@ -45,15 +45,18 @@ public class CompareListAccessGraphQlTests
     [Fact]
     public async Task Guest_SpellingABuyersIdInAnotherCase_GetsOnlyAGuestList()
     {
-        // Where ids compare case-sensitively (PostgreSQL, and this harness's user store), "BUYER-1" is an id no
-        // registered user has, so the guest rule lets it through. The platform's search cache ignores case, though:
-        // a guest lookup that could also match the buyer's list was answered from the buyer's cached lookup, and the
-        // guest read and changed the buyer's list. A guest's lookup now reaches only guest lists.
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
+        // Where ids compare case-sensitively (PostgreSQL, and SQLite here), "BUYER-1" is an id no registered user has,
+        // so the guest rule lets it through, once the platform's cached copy of the buyer's account is gone: that cache
+        // ignores case and would answer for "BUYER-1" with the buyer, refusing the guest. The platform's search cache
+        // ignores case as well: a guest lookup that could also match the buyer's list was answered from the buyer's
+        // cached lookup, and the guest read and changed the buyer's list. A guest's lookup now reaches only guest lists.
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
         await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-1@printers"));
         // Caches the buyer's lookup: a buyer without an organization, as every guest is.
         await ctx.ExecuteAsBuyerAsync("buyer-1", Query("buyer-1"));
+        // The buyer signs in again elsewhere, which changes the account: its cached copy goes, the list lookup stays.
+        await ctx.RecordSignInAsync("buyer-1");
 
         var query = await ctx.ExecuteAsGuestAsync(Query("BUYER-1"));
         var save = await ctx.ExecuteAsGuestAsync(SaveProducts("BUYER-1", "printer-2@printers"));
@@ -69,8 +72,8 @@ public class CompareListAccessGraphQlTests
         // The same cache entry in the other order: a guest asks for "BUYER-1" first and finds nothing, and the buyer's
         // own lookup was answered with that cached nothing. The buyer's list was hidden, and their next add went into
         // a second list that the oldest-first lookup never shows.
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
         await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-1@printers"));
 
         await ctx.ExecuteAsGuestAsync(Query("BUYER-1"));
@@ -81,9 +84,9 @@ public class CompareListAccessGraphQlTests
     [Fact]
     public async Task SignedInBuyer_CannotReadOrChangeAnotherBuyersList()
     {
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
-        ctx.Users.Add("buyer-2");
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
+        await ctx.AddUserAsync("buyer-2");
         await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-1@printers"));
 
         var query = await ctx.ExecuteAsBuyerAsync("buyer-2", Query("buyer-1"));
@@ -105,8 +108,8 @@ public class CompareListAccessGraphQlTests
     [Fact]
     public async Task SignedInBuyer_UsesTheirOwnList_UnderTheirUserId()
     {
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
 
         var saved = (await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-1@printers"))).Data("saveProductsToCompareList");
 
@@ -123,8 +126,8 @@ public class CompareListAccessGraphQlTests
         // compare them case-sensitively, SQL Server's default collation doesn't, and the cleanup matches them
         // against the user store exactly. A list saved under "BUYER-1" would be missing for "buyer-1" on two
         // providers and deleted as orphaned on all three, so the caller's own id takes the token's spelling.
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
 
         await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("BUYER-1", "printer-1@printers"));
 
@@ -137,8 +140,8 @@ public class CompareListAccessGraphQlTests
     [Fact]
     public async Task Administrator_CanReadAndChangeABuyersList()
     {
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
         var saved = (await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-1@printers", "printer-2@printers"))).Data("saveProductsToCompareList");
 
         var read = (await ctx.ExecuteAsAdministratorAsync(Query("buyer-1"))).Data("compareList");
@@ -154,10 +157,10 @@ public class CompareListAccessGraphQlTests
     {
         // Every endpoint runs the X-API's account-state check before authorizing: a token issued before the account
         // was blocked must stop working, for the buyer's own list too.
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
         await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-1@printers"));
-        ctx.Users.LockOut("buyer-1");
+        await ctx.LockOutUserAsync("buyer-1");
 
         (await ctx.ExecuteAsBuyerAsync("buyer-1", Query("buyer-1"))).ErrorCode.Should().Be("UserLocked");
         (await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-2@printers"))).ErrorCode.Should().Be("UserLocked");
@@ -169,8 +172,8 @@ public class CompareListAccessGraphQlTests
     {
         // A buyer of two organizations compares for each separately, with that organization's prices; which one is
         // decided at sign-in and carried by the token, so no argument can point a call at the other.
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
 
         await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "printer-1@printers"), organizationId: "org-1");
         await ctx.ExecuteAsBuyerAsync("buyer-1", SaveProducts("buyer-1", "laptop-1@laptops"), organizationId: "org-2");

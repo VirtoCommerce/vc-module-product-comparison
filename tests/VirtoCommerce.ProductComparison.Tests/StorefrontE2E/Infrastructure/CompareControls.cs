@@ -19,10 +19,23 @@ internal static class CompareControls
     public static ILocator PriceBlock(IPage page) => page.GetByRole(AriaRole.Complementary, new() { Name = "Sidebar" });
 
     /// <summary>The compare toggle in the price block while the product is not in the list.</summary>
-    public static ILocator AddToCompare(IPage page) => PriceBlock(page).GetByRole(AriaRole.Button, new() { Name = "Add to Compare", Exact = true });
+    public static ILocator AddToCompare(IPage page) => AddToCompare(PriceBlock(page));
 
     /// <summary>The same toggle once the product is in the list.</summary>
-    public static ILocator RemoveFromCompare(IPage page) => PriceBlock(page).GetByRole(AriaRole.Button, new() { Name = "Remove from Compare", Exact = true });
+    public static ILocator RemoveFromCompare(IPage page) => RemoveFromCompare(PriceBlock(page));
+
+    /// <summary>The compare toggle inside <paramref name="scope"/>, a product card for one, while the product is not in the list.</summary>
+    public static ILocator AddToCompare(ILocator scope) => scope.GetByRole(AriaRole.Button, new() { Name = "Add to Compare", Exact = true });
+
+    /// <summary>The same toggle once the product is in the list.</summary>
+    public static ILocator RemoveFromCompare(ILocator scope) => scope.GetByRole(AriaRole.Button, new() { Name = "Remove from Compare", Exact = true });
+
+    /// <summary>
+    /// A catalog page's card for the product, by its title link. The ui-kit's card has no role of its own; its class
+    /// names it.
+    /// </summary>
+    public static ILocator ProductCard(IPage page, string name)
+        => page.Locator(".vc-product-card").Filter(new() { Has = page.GetByRole(AriaRole.Link, new() { Name = name, Exact = true }) });
 
     /// <summary>The price block's Share button, in the same action row as the compare toggle: the row has rendered.</summary>
     public static ILocator Share(IPage page) => PriceBlock(page).GetByRole(AriaRole.Button, new() { Name = "Share", Exact = true });
@@ -63,6 +76,12 @@ internal static class CompareControls
 
     /// <summary>A column's remove button.</summary>
     public static ILocator RemoveButton(ILocator column) => column.GetByRole(AriaRole.Button, new() { Name = "Remove from compare", Exact = true });
+
+    /// <summary>A plain product column's "Add to cart".</summary>
+    public static ILocator AddToCartButton(ILocator column) => column.GetByRole(AriaRole.Button, new() { Name = "Add to cart", Exact = true });
+
+    /// <summary>The header's Cart link showing <paramref name="count"/> on its badge.</summary>
+    public static ILocator HeaderCartLink(IPage page, int count) => MainMenu(page).GetByRole(AriaRole.Link, new() { NameRegex = new Regex($@"^{count}\s*Cart$") });
 
     public static ILocator EmptyState(IPage page) => page.GetByRole(AriaRole.Heading, new() { Level = 3, Name = "Your compare list is empty", Exact = true });
 

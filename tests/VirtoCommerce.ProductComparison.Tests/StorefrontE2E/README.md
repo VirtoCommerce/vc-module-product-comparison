@@ -1,12 +1,17 @@
 # Storefront E2E
 
 Playwright tests that drive the **real storefront** with the module's **compare plugin** against the **component
-harness hosted inside the test process**. No second dotnet process: the same `ProductComparisonTestContext` (the
-module's own `Module.Initialize`, in-memory SQLite, hand-written doubles) sits behind Kestrel on a loopback port, so a
-test seeds through the module's real mutation, acts through the browser and asserts against the same rows.
+harness hosted inside the test process**. No second dotnet process: the same `ProductComparisonTestContext` (the module
+as the platform starts it, among the real platform and modules around it, every database an in-memory SQLite one) sits
+behind Kestrel on a loopback port, with the modules behind the storefront's shell besides, so a test seeds through the
+real services and mutations, acts through the browser and asserts against the same rows.
 
 ```
-test process ─┬─ Kestrel (InProcessBackend) ── ProductComparisonTestContext (SQLite + doubles) + StorefrontCatalog
+test process ─┬─ Kestrel (InProcessBackend) ── ProductComparisonTestContext: the module + the platform (settings,
+              │                                  accounts, dynamic properties, change log) + store, core, customer,
+              │                                  catalog, pricing, inventory, marketing, cart, payment, shipping and
+              │                                  assets modules (SQLite) + search (Lucene, RAM) + X-API, X-Catalog, X-Cart
+              │                                + X-Profile, X-Frontend, SEO, X-CMS + content, X-Recommend (the shell's)
               ├─ Playwright → Chromium ──► a clone:  https://localhost:<port> (Vite dev server, one node process per run)
               │                            a build:  http://127.0.0.1:<kestrel port> (Kestrel serves it)
               └─ Vite proxy (a clone only): /graphql, /connect/token, /revoke/token, /modules/…/plugins/vc-frontend/
@@ -23,45 +28,76 @@ storefront asks `store.plugins` for it, the platform's own `AppManifestService` 
 `when` (`ProductComparison.Enabled`) is evaluated by the storefront against the store's settings, as served by the
 real X-API `store` query.
 
-## Product data
+## Platform and modules
 
-The storefront reads products through X-Catalog: the product page's `product` field and the compare list's `product`
-field both go through `LoadProductsQuery`, the compare page's category tabs through `LoadCategoryQuery`. In production
-X-Catalog answers both from the search index. Here `StorefrontCatalog` answers them from memory, at the query level:
-catalog models built as the catalog module saves them (`CatalogProduct` and `Category` with outlines and per-store SEO
-entries), wrapped as X-Catalog wraps them (`ExpProduct` with a list price, `ExpCategory`). Everything around those two
-queries is real: X-Catalog's root fields (`DigitalCatalogSchema`), its store access rule, its graph types (name, price,
-availability, breadcrumbs) and its handlers for the product page's extras (slug, outline, configuration, videos,
-associations) over empty catalog searches.
+The backend runs the platform's and the modules' own code, as a deployment runs it; the test's own code is only the
+sign-in token endpoint and the list of installed modules (see Doubles below).
+- **Data:** every module and the platform keep their data in an in-memory SQLite database of their own
+  (`ModuleDatabases`), created from their EF model when first used.
+- **Search:** the search module's gateway serves the Lucene provider with its index in RAM.
+- **Registrations:** the platform's own extensions where it has them (Platform.Data's `AddPlatformServices`: settings,
+  dynamic properties, the change log, the caches, the event bus; its `UseDbTriggers`, once per process: the audit
+  stamps), and Platform.Web's `Startup` restated where it is the host's own (ASP.NET Identity with the platform's user
+  and role managers, authorization, the HTTP client factory, Kestrel's synchronous IO). Each module registers what its
+  `Module.Initialize` registers at the package version referenced here, minus export and import, bulk actions,
+  background jobs, other modules' event handlers and admin authorization (`PlatformModules` for what the component
+  tests share, `StorefrontShellModules` for the shell's). X-API, X-Catalog and X-Cart register through their own
+  extensions (`AddXCore`, `AddSchema` + `AddXCatalog`, `AddSchema` + `AddXCart`).
+- **Configuration:** what the platform's shipped `appsettings.json` sets that this code reads: the default store, the
+  GraphQL playground (on), the authentication types GraphQL ignores; and the platform's country lists, which it ships in
+  its own content root, as copies in `Platform/localization`.
+- **Startup:** the module's own `Module.PostInitialize`, and what the other modules' `PostInitialize` does: their
+  settings (the platform refuses to read a setting nobody registered), dynamic property and member types, search
+  request builders, the prices and stock in the product index (the category page filters on them: no price, no
+  result), the payment and shipping methods, and the GraphQL endpoints.
+- **Seed:** what an administrator would set up, through the modules' services: a USD currency and the stores
+  (`ProductComparisonTestContext`), then the catalog (`TestCatalog`): the store's catalog, a pricelist assigned to the
+  store, and categories (with an SEO entry each, which breadcrumbs need), products and prices. The index is then built
+  with the search module's indexing manager, a full rebuild. The product page, the compare list's products and tabs,
+  and the category page's cards are X-Catalog's answers from that index; an "Add to cart" goes through X-Cart's
+  `addItem` into the cart module's tables. A buyer is what the storefront's registration creates: a contact and its
+  account, in the store.
 
-Why not the real index: the catalog module over SQLite, Lucene and X-Catalog's search pipeline (its price, inventory,
-discount, tax and vendor middlewares) would mostly test X-Catalog, at the cost of several more harness slices. What
-the compare list needs from the catalog is that its product and category loads resolve, and that an id the catalog
-doesn't have comes back missing (the "no longer available" column); the double does both the way the index does. The
-breadcrumbs the plugin takes a product's compare category from are built by X-Catalog's own code from the outlines,
-and the double refuses a query for a store that doesn't exist, so a wrong store id in the module's loads would show.
+Where a module ships provider-specific SQL (SQL Server, PostgreSQL, MySQL), the harness runs the module's PostgreSQL
+statements on SQLite: `SqliteCatalogRawDatabaseCommand` (a category's children and parents, a product's associations)
+and `SqliteCartRawDatabaseCommand` (the wishlists that hold a page's products). Statements nothing here reaches throw
+with their name instead.
+
+Blob storage is the file system providers' (assets and content), over temporary folders: nothing seeded has a file.
+The tax module is not installed, as on a store without it: X-Catalog and X-Cart take it as optional.
+
+### Doubles
+
+Two pieces stand in for the platform's:
+- **Tokens:** the platform's OpenIddict server isn't hosted. `TestTokenService` mints a bearer token with the claims a
+  customer's token carries, for an account of the security database, and the test endpoint answers the storefront's
+  refresh grant and revoke.
+- **Installed modules:** the platform builds that list by discovering module folders at startup.
+  `StorefrontModuleService` reports the module (from its real `module.manifest`) and X-Frontend, the app whose plugins
+  `store.plugins` lists.
 
 ## Layout
 
 | Piece | File | Role |
 |---|---|---|
 | Backend host | `Infrastructure/InProcessBackend.cs` | Copies the harness registrations into a `WebApplication`, starts Kestrel on port 0 (with a clone, on the port the run's Vite proxies to), builds the schema eagerly, self-checks the `store` query and its plugin; `RunExclusiveAsync` gives test-side reads and seeds a turn between requests. |
-| Shell services | `Infrastructure/StorefrontServices.cs` | Real X-API `store` handler, real X-Catalog root fields and satellite handlers, real profile `UserType`, the platform's `AppManifestService` for `store.plugins`; JWT bearer auth; pipeline (a built storefront's files, plugin files, one request at a time); the store the harness double hands out, made into a storefront's (`ConfigureStore`). |
-| Shell schema | `Infrastructure/StorefrontShellSchemaBuilder.cs`, plus a file per response model and per graph type: `PageContextResponse`, `MenuLinkList`, `MenuLink`, `SearchHistoryResult`, each with its `…Type` | `pageContext` and `me` (a guest keeps the id the storefront sends, as X-Frontend does; a signed-in caller gets their account), `currentCustomerAddresses` (a signed-in storefront's address book), `childCategories`, `cart`, `organization`, `menu`, `searchHistory`: real response types, empty data. |
-| Catalog | `Infrastructure/StorefrontCatalog.cs`, `Infrastructure/E2ECatalog.cs`, `Infrastructure/NoCatalogExtrasSearchService.cs` | The in-memory catalog at X-Catalog's query level (see Product data); the seed every group gets: two categories under two top ones, three plain products, and a product id the catalog never had. |
-| Doubles | `Infrastructure/`: `EmptyStoreSearchService.cs`, `CurrencyServiceStoreCurrencyResolver.cs`, `PasswordOnlyStoreAuthenticationService.cs`, `StorefrontModuleService.cs`, `NoDynamicPropertySearchService.cs`, `NoCartAvailMethodsService.cs`, `UnusedService.cs` | Store search, currencies and sign-in schemes; the module list (the module's own `module.manifest` plus X-Frontend, which declares the storefront app, at a version the storefront's "outdated backend" check can't flag); no dynamic properties; `UnusedService` proxies for constructor-only dependencies of the profile and cart graph types, which name themselves if a page ever calls one. |
+| Shell services | `Infrastructure/StorefrontServices.cs` | The shell's modules, the platform's `AppManifestService` for `store.plugins` over the module list, bearer authentication for the token, Kestrel's synchronous IO, and the request pipeline before the modules' endpoints: a built storefront's files, the plugin's files, one request at a time, authentication. |
+| Shell modules | `Infrastructure/StorefrontShellModules.cs` | X-Profile (`me`, `organization`, `currentCustomerAddresses`), X-Frontend (`pageContext`) with the SEO module behind its slug, X-CMS over the content module's menus (`menu`), X-Recommend (`searchHistory`), registered and started as their modules do (see Platform and modules). |
+| Platform and modules | `../Infrastructure/`: `PlatformModules*.cs`, `ModuleDatabases.cs`, `SqlCommandLog.cs`, `PlatformDbTriggers.cs`, `TestedModule.cs`, `Sqlite*RawDatabaseCommand.cs`; `../Platform/localization` | Shared with the component tests: the platform's and the modules' registrations and startup steps, their SQLite databases and the SQL they run, the platform's audit stamps, the module's own manifest, the raw SQL on SQLite, the country lists (see Platform and modules). |
+| Catalog | `../Infrastructure/TestCatalog.cs`, `Infrastructure/E2ECatalog.cs` | The seed, through the modules' services, and the index rebuild (see Platform and modules); what every group gets: two categories under two top ones, three plain products with prices, and a product id the catalog never had. |
+| Doubles | `Infrastructure/StorefrontModuleService.cs`; the Tokens row | The module list (the module's own `module.manifest` plus X-Frontend, which declares the storefront app, at a version the storefront's "outdated backend" check can't flag) and the tokens (see Doubles). |
 | Compare plugin | `Infrastructure/StorefrontPlugin.cs` | The module's plugin build (`plugins/vc-frontend`) and its route; a missing build, or one older than its sources under `StorefrontApp/src` (specs and `src/mocks` aside), fails the group. |
 | Tokens | `Infrastructure/TestTokenService.cs`, `TokenResponse.cs`, `TestTokenEndpoints.cs` | Bearer tokens with the claims a customer's token carries (`sub`, `name`, `email`, `organization_id` when given), stored the way `useAuth.ts` stores them; the refresh grant and `/revoke/token`. |
 | Storefront location | `Infrastructure/StorefrontLocation.cs` | Finds the storefront, a clone or a build (see Running); a missing or broken one fails the groups with what to do. `StorefrontLocationTests.cs` covers the lookup (Unit). |
 | Vite | `Infrastructure/ViteDevServer.cs`, `Infrastructure/SharedViteDevServer.cs` | A clone's dev server, one per run, on a free port of its own: `node node_modules/vite/bin/vite.js --port N --strictPort` with `APP_BACKEND_URL`, which is fixed at start, so each group's backend takes that port in turn; stopped by an xunit assembly fixture once every test has run; bounded kill. |
-| Group fixture | `Infrastructure/StorefrontEnvironment.cs` | Backend + store settings + catalog + browser per xunit collection; `OpenAsGuestAsync(guestId, path)` = a fresh browser context as a guest the storefront knows by that id; `NewGuestId`, `NewBuyer` give a test a guest or a buyer of its own, `IssueToken` signs the buyer in; `SaveAsGuestAsync` and `SaveAsBuyerAsync` seed a guest's or a buyer's list through the real mutation; `GetListsAsync` reads `CompareList`/`CompareListItem` rows between requests; `ConfigureStore` for a group's store settings, `SeedAsync` for its own products and lists; phase log. |
+| Group fixture | `Infrastructure/StorefrontEnvironment.cs` | Backend + store settings + catalog + browser per xunit collection; `OpenAsGuestAsync(guestId, path)` = a fresh browser context as a guest the storefront knows by that id; `NewGuestId`, `NewBuyerAsync` give a test a guest or a buyer of its own (a contact and its account), `IssueTokenAsync` signs the buyer in; `SaveAsGuestAsync` and `SaveAsBuyerAsync` seed a guest's or a buyer's list through the real mutation; `GetListsAsync` reads `CompareList`/`CompareListItem` rows between requests, `GetCartsAsync` a user's carts through the cart module; `ConfigureStoreAsync` for a group's store settings, saved as an administrator saves them, `SeedAsync` for its own products and lists, before the index is built; phase log. |
 | Request gate | `Infrastructure/RequestGate.cs` | One turn at a time: the host's requests wait at it, and test-side work takes a turn through `RunExclusiveAsync`. |
 | Session | `Infrastructure/StorefrontSession.cs` | Records console errors, dialogs, failed requests, the GraphQL operations sent and those that returned errors; a failing test gets them plus a screenshot in its message. `OpenInNewPageAsync` is the next visit in the same browser (same localStorage); `GetLocalStorageAsync` reads what the storefront remembers; `WaitForGraphQlErrorsAsync` waits for an error the page already showed to be recorded; `GetOperationName` names a routed request's operation. |
-| Controls | `Infrastructure/CompareControls.cs` | The compare toggle, the header's Compare link and its count, the toasts and their Compare link, and the compare page's tabs, columns and buttons, by role and label. |
+| Controls | `Infrastructure/CompareControls.cs` | The compare toggle in the price block or a catalog card, the header's Compare and Cart links and their counts, the toasts and their Compare link, and the compare page's tabs, columns and buttons, by role and label. |
 | Layout audit | `Infrastructure/LayoutAudit.cs` | QA's audit widths and overflow audit (rule BL-UI-004) for the layout tests: prepares a page for measuring, walks the widths, and lists every width and element that broke (see Layout tests). A copy of vc-module-sales-rep's, with this module's namespace and the class prefix that names a culprit's plugin element (`compare-`). |
 | Documents | `Infrastructure/StorefrontDocuments.cs` | Loads the storefront's own `.graphql` operations from the clone and the plugin's from `StorefrontApp` (fragments inlined, `@gate` applied). |
 | Contract | `StorefrontBootContractTests.cs` | Browser-less: the backend answers the storefront's boot documents, the product page's `GetProduct`, a signed-in buyer's `GetCurrentUserAddresses` and the plugin's own operations, for a guest and a buyer (≈2 s). |
-| Group 1 | `GuestCompare/` | A store with the module's defaults. `GuestCompareTests`: a guest adds from the product page, the header counts it, the compare page shows it under its category, removing it empties page, count and list; the add's toast has a "Compare" link to the page, open on the product's category; a "No longer available" column for a product the catalog doesn't have, and its remove; "Clear category" with its confirmation empties that category alone; "Clear all" with its confirmation, then "Restore products". `SignInMergeTests`: a guest's list merges into the buyer's on the first signed-in load, the guest list is deleted and the remembered id forgotten; a merge that fails on its way (aborted, or a gateway's 502 page) keeps the id, and the next load merges; a merge into an account list at the 500-product cap is refused with `COMPARE_LIST_FULL`, both lists stay as they were, the id is forgotten and the buyer is told the list is full. Each asserted on the page and on the rows. |
+| Group 1 | `GuestCompare/` | A store with the module's defaults. `GuestCompareTests`: a guest adds from the product page, the header counts it, the compare page shows it under its category, removing it empties page, count and list; a guest adds from a card on the category page; a full category refuses a sixth product before any request; "Add to cart" from the compare page puts the product in the guest's cart; the add's toast has a "Compare" link to the page, open on the product's category; a "No longer available" column for a product the catalog doesn't have, and its remove; "Clear category" with its confirmation empties that category alone; "Clear all" with its confirmation, then "Restore products". `SignInMergeTests`: a guest's list merges into the buyer's on the first signed-in load, the guest list is deleted and the remembered id forgotten; a merge that fails on its way (aborted, or a gateway's 502 page) keeps the id, and the next load merges; a merge into an account list at the 500-product cap is refused with `COMPARE_LIST_FULL`, both lists stay as they were, the id is forgotten and the buyer is told the list is full. Each asserted on the page and on the rows. |
 | Group 2 | `GuestListsOff/` | `ProductComparison.AnonymousListEnabled` off: a guest's click gets "Sign in to add products to compare" with a Sign in link back to the page (AC 3); nothing is sent, no list exists. |
 | Group 3 | `CompareOff/` | `ProductComparison.Enabled` off: no toggle and no slot kept for it on the product page, no header link, the plugin never runs (no `CompareList` sent), and `/compare` is the storefront's 404. |
 | Group 4 | `CompareLayout/` | The compare page's layout (`Kind=Layout`), with QA's stress content: an 80-character category name, a 100-character product name, two names that differ only at their ends, one with no break in it, an unbroken SKU and model number, long notes, big amounts, a product the catalog no longer has, property rows enough to scroll the page and categories enough to fill the tab row. The page as it opens, with the differences shown and a row pinned, scrolled until the table's header sticks, with the Clear category and the Clear all dialog open, and emptied, each at QA's 19 widths (see Layout tests). |
@@ -75,8 +111,9 @@ live in memory and go with the group. Each test carries a 5-minute timeout.
 Measured on the workstation that produced this draft, against a clone: the contract test and the three groups (seven
 tests) run in about 70 seconds. A group's backend is up in under two seconds; the run's Vite in about five; the run's
 first page load costs ≈20 seconds (Vite compiles on demand, then the storefront loads the plugin), every later one
-about a second, the first page of each later group included. Against a build (the vc-frontend PR's), the contract test
-and the four groups run in about 70 seconds; a layout test, which walks its 19 widths, takes about five.
+about a second, the first page of each later group included. Against a build (the vc-frontend PR's), on the platform
+modules, the contract test and the four groups run in about 90 seconds; a group's backend, with its modules, seed and
+index, is up in a few seconds, and a layout test, which walks its 19 widths, takes about five.
 
 ## Running
 
@@ -157,11 +194,15 @@ resize a desktop one), and whether text that fits is also readable: two look-ali
 
 ## Harness changes
 
-- `ProductComparisonTestContext.Create(..., providerFactory)` lets a host build (and own) the provider;
-  `UserIdClaimTypes` now lists `sub` first (the platform's token claim) and `NameIdentifier` (the component tests').
-- The test project references Microsoft.Playwright, VirtoCommerce.Platform.Modules (`AppManifestService`),
-  VirtoCommerce.ProfileExperienceApiModule.Data (`UserType`), VirtoCommerce.XCatalog.Data (`DigitalCatalogSchema` and
-  the satellite handlers; it depends on X-Catalog.Core alone) and the ASP.NET Core framework (Kestrel).
+- `ProductComparisonTestContext.CreateAsync(configureServices, buildHost)` lets a host build (and own) the web
+  application the platform's and the modules' startup then adds its endpoints to.
+- The test project references Microsoft.Playwright, the platform's packages (Platform.Modules for `AppManifestService`
+  and optional dependencies, Platform.Security and Platform.Data through the modules), the data packages of the store,
+  core, customer, catalog, pricing, inventory, marketing, cart, payment, shipping, assets (with the file system
+  provider), file experience API, search, Lucene, SEO and content (with its file system provider) modules, and of
+  X-API, X-Catalog, X-Cart, X-Profile, X-Frontend, X-CMS and X-Recommend, at the versions X-Cart.Core 3.1042.0 and
+  X-Catalog.Core 3.1023.0 depend on (X-Frontend at 3.1008.0, the last one on this platform), and the ASP.NET Core
+  framework (Kestrel).
 
 ## What the run taught
 
@@ -169,14 +210,11 @@ resize a desktop one), and whether text that fits is also readable: two look-ali
   answers a guest without an id with an empty one (as sales-rep's did, which only signs reps in) makes every compare
   call fail closed, so the shell does what X-Frontend does: it keeps the id the storefront sent, or makes a new one,
   never a registered account's.
-- The module's store settings reach the storefront only under the module's id. The platform's settings registrar
-  stamps that id on the descriptors when the module registers them (`PostInitialize`, which the harness doesn't run),
-  so the store double's entries had none, and the plugin's `when` would have read "off". `ConfigureStore` stamps it.
+- The module's store settings reach the storefront only under the module's id, which the platform's settings
+  registrar stamps on the descriptors when the module's `PostInitialize` registers them. The harness runs that
+  `PostInitialize`: drop its store-settings registration and the contract test and the compare-off group fail.
 - The plugin build found on disk was older than two of its sources (`useCompareList.ts`, `compare-products.vue`):
   `EnsureBuilt` catches that. Specs and `src/mocks` are vitest-only, so they don't count as sources of the bundle.
-- The eager schema build named, one at a time, what the profile and cart graph types take in their constructors
-  beyond the harness (dynamic property dictionary items, pickup locations, cart sharing, contact repository, member
-  addresses, customer preferences, memberships, roles). None is reached by these pages; each is an `UnusedService`.
 - The storefront's own boot, the product page and the plugin answered on the first browser run once the contract test
   passed: the browser-less contract is the cheap place to find a shell gap.
 - A page can look right while one of its requests fails: a signed-in storefront loads the account's addresses through
@@ -187,16 +225,44 @@ resize a desktop one), and whether text that fits is also readable: two look-ali
 - A `Notifications(page)` helper doesn't compile here: a transitive package brings a `VirtoCommerce.Notifications`
   namespace. The toast region is `Toasts(page)`.
 - The header's Compare link reads "1 Compare" with its badge and "Compare" without; the count is the link's name.
+- On the platform modules, the contract test named what the paths reach, one at a time, as the profile types had:
+  - the payment and shipping methods: the cart service filters a cart's payments and shipments by them on every load;
+  - the file upload service: X-Cart hands it a cart's configuration files on every save, an empty list here;
+  - inventory: X-Cart's cart product service takes it as a hard dependency;
+  - X-API's one type registration: X-Catalog creates prices through the factory with their currency;
+  - the modules' raw SQL: a category save clears its children's cache with it.
+- The real validators check the seed: a pricelist goes to a store or a catalog, not both, and a property's name is
+  code-like (its label is a display name).
+- The category page filters out products without a price, and prices reach the index only through the pricing module's
+  startup step, which adds them to the product index: without it, the page showed "0 results".
+- The platform's own services showed what the doubles had papered over:
+  - the settings manager refuses a setting no module registered, so every hosted module's settings are registered as
+    its `PostInitialize` registers them;
+  - X-API reads its options from the platform's appsettings: without `GraphQLPlayground:Enable` its scoped schemas ask
+    for a GraphiQL page it never registered, and with the playground off it edits a process-wide list of validation
+    rules, which parallel test classes trip over; the shipped value (on) avoids both;
+  - X-API accepts a GraphQL POST only as `application/json` exactly (Apollo's), not `application/json; charset=utf-8`,
+    and its Newtonsoft serializer needs Kestrel's synchronous IO, which Platform.Web allows;
+  - X-API finds a module's optional graph types (X-Frontend's white labeling) only among loaded assemblies, so the
+    harness loads the modules' assemblies first, as the platform does at startup;
+  - the profile's address book answers an account without a contact with Forbidden, and X-Recommend's search history
+    an account without a store; the storefront turns any Forbidden into its 403 page. A storefront-registered buyer has
+    both, so the E2E buyers do too;
+  - a real currency needs its name set: `Currency`'s own constructor sets the English name, not the one saved.
+- The platform's user manager caches an account under a lowercase key: once a buyer's account is cached, "BUYER-1"
+  finds the buyer, and the guest rule refuses a guest asking with it. The component test for a guest who spells a
+  buyer's id in another case now signs the buyer in again first, which drops the cached account, as any sign-in does.
 
 ## Known gaps
 
 - The sign-in page itself is not driven: it posts the password grant to `/connect/token`, which the test endpoint
   doesn't implement (the harness's accounts have no passwords). The merge test leaves the browser as the sign-in leaves
   it (the token in `localStorage.auth`, `user-id` dropped) and loads the next page.
-- No catalog listing pages (they search the index): the toggle on catalog cards and related-product cards is the same
-  plugin component in the same `productActions` place, but its surroundings there are not exercised.
-- Not covered from PLAN §8: the per-category limit, a configured product (it needs X-Cart's configuration query and
-  configurable product data), the refetch on tab focus, the mobile menu count.
-- E2E buyers have no contact and no organization (the profile's contact and organization types take customer-module
-  services the harness doesn't host), so lists keyed by the token's organization (D12) are covered by the component
-  tests only.
+- Related-product cards (the product page's associations) are the same plugin component in the same `productActions`
+  place as the catalog cards the tests drive; none is seeded.
+- Not covered from PLAN §8: a configured product (it needs configurable product data), the refetch on tab focus, the
+  mobile menu count.
+- E2E buyers have a contact but no organization, so lists keyed by the token's organization (D12) are covered by the
+  component tests only.
+- Other modules' event handlers are not registered (change logs, event-based indexing, membership clean-up): the tests
+  build the index in full and read no change log.

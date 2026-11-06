@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -36,7 +35,8 @@ public sealed class StorefrontBootContractTests
         }
 
         await using var backend = await InProcessBackend.StartAsync();
-        E2ECatalog.Seed(backend.Catalog);
+        await E2ECatalog.SeedAsync(backend.Catalog);
+        await backend.Catalog.IndexAsync();
         var guestId = Guid.NewGuid().ToString();
 
         using var guest = new HttpClient { BaseAddress = new Uri(backend.Url) };
@@ -102,9 +102,9 @@ public sealed class StorefrontBootContractTests
 
         // 6. A signed-in buyer's page context: their account, which is what turns the storefront "authenticated".
         var buyerId = "e2e-boot-buyer";
-        backend.Context.Users.Add(buyerId);
+        await backend.Context.AddBuyerAsync(buyerId);
         using var buyer = new HttpClient { BaseAddress = new Uri(backend.Url) };
-        buyer.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", backend.Tokens.Issue(buyerId).AccessToken);
+        buyer.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", (await backend.Tokens.IssueAsync(buyerId)).AccessToken);
 
         var buyerContext = await PostAsync(buyer, "GetPageContext", Storefront("pageContext/queries/getPageContext/getPageContextQuery.graphql"),
             new { userId = buyerId, domain = "127.0.0.1", permalink = "compare", cultureName = "en-US" });
@@ -128,7 +128,7 @@ public sealed class StorefrontBootContractTests
 
     private static async Task<JsonElement> PostAsync(HttpClient client, string operationName, string document, object variables)
     {
-        var response = await client.PostAsJsonAsync("/graphql", new { operationName, query = document, variables });
+        var response = await GraphQlHttp.PostAsync(client, new { operationName, query = document, variables });
         var json = await response.Content.ReadAsStringAsync();
 
         response.IsSuccessStatusCode.Should().BeTrue($"{operationName} must be accepted: {json}");

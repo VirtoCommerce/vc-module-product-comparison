@@ -4,21 +4,24 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
-using VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure;
+using VirtoCommerce.Platform.Core.Security;
 using CustomerSecurity = VirtoCommerce.CustomerModule.Core.ModuleConstants.Security;
 
 namespace VirtoCommerce.ProductComparison.Tests.StorefrontE2E.Infrastructure;
 
 /// <summary>
-/// Mints the bearer token the storefront keeps in localStorage.auth, for a buyer of the harness's
-/// <see cref="TestUsers"/>. The claims are the ones the platform's /connect/token puts in a customer's token and the
-/// compare list reads: the account id (<c>sub</c>), its name and email, and the organization the buyer signed in
-/// with, when any. Only the signature is test-owned (a symmetric key the host validates).
+/// Mints the bearer token the storefront keeps in localStorage.auth, for an account of the platform's security
+/// database. The claims are the ones the platform's /connect/token puts in a customer's token and the compare list
+/// reads: the account id (<c>sub</c>), its name and email, and the organization the buyer signed in with, when any.
+/// Only the signature is test-owned (a symmetric key the host validates): the platform's OpenIddict server isn't
+/// hosted.
 /// </summary>
-internal sealed class TestTokenService(TestUsers users)
+internal sealed class TestTokenService(Func<UserManager<ApplicationUser>> userManagerFactory)
 {
     public const string Issuer = "http://product-comparison-storefront-e2e/";
     public const string Audience = "resource_server";
@@ -30,9 +33,10 @@ internal sealed class TestTokenService(TestUsers users)
     private readonly ConcurrentDictionary<string, (string UserId, string OrganizationId)> _refreshTokens = new();
 
     /// <summary>A token for an existing account, as a test signs a browser in without the sign-in page.</summary>
-    public TokenResponse Issue(string userId, string organizationId = null)
+    public async Task<TokenResponse> IssueAsync(string userId, string organizationId = null)
     {
-        var user = users.Find(userId) ?? throw new InvalidOperationException($"No account with id '{userId}'.");
+        using var userManager = userManagerFactory();
+        var user = await userManager.FindByIdAsync(userId) ?? throw new InvalidOperationException($"No account with id '{userId}'.");
 
         var claims = new List<Claim>
         {
@@ -65,6 +69,6 @@ internal sealed class TestTokenService(TestUsers users)
     }
 
     /// <summary>The refresh grant: a new token for the account the refresh token was issued to, once.</summary>
-    public TokenResponse Refresh(string refreshToken)
-        => _refreshTokens.TryRemove(refreshToken ?? string.Empty, out var owner) ? Issue(owner.UserId, owner.OrganizationId) : null;
+    public async Task<TokenResponse> RefreshAsync(string refreshToken)
+        => _refreshTokens.TryRemove(refreshToken ?? string.Empty, out var owner) ? await IssueAsync(owner.UserId, owner.OrganizationId) : null;
 }

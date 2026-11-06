@@ -28,7 +28,7 @@ public class CompareListUniqueIndexComponentTests
     [Fact]
     public async Task SecondListForTheSameUserStoreAndOrganization_IsRefused()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         await ctx.SaveAsync(AccountList("buyer-1", organizationId: "org-1"));
 
         var act = () => ctx.SaveAsync(AccountList("buyer-1", organizationId: "org-1"));
@@ -42,7 +42,7 @@ public class CompareListUniqueIndexComponentTests
     public async Task ListsDifferingInOneKeyPart_AreAllowed()
     {
         // The key is all three: the same buyer has a list per store and per organization they buy for.
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
 
         await ctx.SaveAsync(AccountList("buyer-1", organizationId: "org-1"));
         await ctx.SaveAsync(AccountList("buyer-1", organizationId: "org-2"));
@@ -56,7 +56,7 @@ public class CompareListUniqueIndexComponentTests
     [Fact]
     public async Task SameProductAndConfigurationTwiceInOneList_IsRefused()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var list = await ctx.SaveAsync(AccountList("buyer-1", items: [Item("printer-1", "printers", 0, configurationKey: "key-a")]));
 
         var changed = await ctx.CompareListService.GetByIdAsync(list.Id);
@@ -71,7 +71,7 @@ public class CompareListUniqueIndexComponentTests
     [Fact]
     public async Task SameProductWithAnotherConfigurationOrInAnotherList_IsAllowed()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
 
         var list = await ctx.SaveAsync(AccountList("buyer-1", items:
         [
@@ -91,7 +91,7 @@ public class CompareListUniqueIndexComponentTests
         // racing for a guest, or for a buyer without an organization, leave two lists. Nothing stops it here; what
         // keeps it harmless is that every lookup takes the oldest of them, so the second is never read again (a
         // guest's expires, a buyer's stays unused).
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var first = await ctx.SaveAsync(GuestList("guest-1", items: [Item("printer-1", "printers", 0)]));
         var second = await ctx.SaveAsync(GuestList("guest-1", items: [Item("printer-2", "printers", 0)]));
         await ctx.SetDatesAsync(first.Id, createdDate: DateTime.UtcNow.AddMinutes(-1));

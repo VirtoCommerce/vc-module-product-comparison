@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using VirtoCommerce.CustomerModule.Core.Model;
+using VirtoCommerce.CustomerModule.Data.Repositories;
 using VirtoCommerce.Platform.Core.Common;
+using VirtoCommerce.Platform.Security.Repositories;
 using VirtoCommerce.ProductComparison.Core;
 using VirtoCommerce.ProductComparison.Core.Models;
 using VirtoCommerce.ProductComparison.Data.Models;
@@ -17,7 +19,8 @@ namespace VirtoCommerce.ProductComparison.Tests.ComponentTests;
 
 /// <summary>
 /// The daily cleanup (VCST-5918, PLAN §4.4 and §11.9), run as the recurring job runs it: <c>Process</c> on the real
-/// <c>CleanupCompareListsJob</c> over SQLite, with the accounts and contacts it checks as doubles. It deletes guest
+/// <c>CleanupCompareListsJob</c> over SQLite, with the accounts and contacts it checks in the platform's security
+/// database and the customer module, created as an administrator creates them. It deletes guest
 /// lists left unchanged past the lifetime setting, then registered lists nobody can reach any more: their user is
 /// gone, or their organization is one the user's contact no longer belongs to, so no sign-in token can carry it.
 /// Everything else stays.
@@ -31,8 +34,8 @@ public class CleanupCompareListsJobComponentTests
     [Fact]
     public async Task GuestListsUnchangedPastTheLifetime_AreDeleted_FreshAndRegisteredOnesStay()
     {
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.Users.Add("buyer-1");
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.AddUserAsync("buyer-1");
         var expired = await ctx.SaveAsync(GuestList("guest-expired", items: [Item("printer-1", "printers", 0, configurationKey: "key-a", sections: [TextSection("engraving", "Hi")])]));
         var fresh = await ctx.SaveAsync(GuestList("guest-fresh", items: [Item("printer-1", "printers", 0)]));
         // A registered buyer's list never expires, however old: it follows the account.
@@ -53,8 +56,8 @@ public class CleanupCompareListsJobComponentTests
     public async Task GuestListLifetime_ComesFromTheSetting()
     {
         // Under the default 48 hours both lists would stay; at 2 hours the one unchanged for 3 goes.
-        using var ctx = ProductComparisonTestContext.Create();
-        ctx.SetSetting(ModuleConstants.Settings.Cleanup.AnonymousListLifetimeHours, 2);
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
+        await ctx.SetSettingAsync(ModuleConstants.Settings.Cleanup.AnonymousListLifetimeHours, 2);
         var threeHoursOld = await ctx.SaveAsync(GuestList("guest-1"));
         var oneHourOld = await ctx.SaveAsync(GuestList("guest-2"));
         await ctx.SetDatesAsync(threeHoursOld.Id, modifiedDate: DateTime.UtcNow.AddHours(-3));
@@ -70,7 +73,7 @@ public class CleanupCompareListsJobComponentTests
     {
         // The lifetime counts from the last change, not from creation (D15): a guest who keeps comparing keeps the
         // list. The change goes through the service, so this also needs the save to move ModifiedDate.
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var list = await ctx.SaveAsync(GuestList("guest-1", items: [Item("printer-1", "printers", 0)]));
         await ctx.SetDatesAsync(list.Id, createdDate: DateTime.UtcNow.AddDays(-10), modifiedDate: DateTime.UtcNow.AddDays(-10));
 
@@ -86,19 +89,19 @@ public class CleanupCompareListsJobComponentTests
     [Fact]
     public async Task RegisteredLists_NobodyCanReachAnyMore_AreDeleted()
     {
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
 
         // buyer-1's contact belongs to org-1; it left org-2.
-        ctx.Members.AddContact("contact-1", "org-1");
-        ctx.Users.Add("buyer-1", memberId: "contact-1");
+        await ctx.AddContactAsync("contact-1", "org-1");
+        await ctx.AddUserAsync("buyer-1", memberId: "contact-1");
         // buyer-2's account was deleted; its lists stayed behind.
         // buyer-3 has an account without a contact, so it can pick no organization.
-        ctx.Users.Add("buyer-3");
+        await ctx.AddUserAsync("buyer-3");
         // buyer-4's account points at a contact that no longer exists.
-        ctx.Users.Add("buyer-4", memberId: "contact-deleted");
+        await ctx.AddUserAsync("buyer-4", memberId: "contact-deleted");
         // An employee picks organizations as a contact does.
-        ctx.Members.AddEmployee("employee-member-1", "org-3");
-        ctx.Users.Add("employee-1", memberId: "employee-member-1");
+        await ctx.AddEmployeeAsync("employee-member-1", "org-3");
+        await ctx.AddUserAsync("employee-1", memberId: "employee-member-1");
 
         var lists = new Dictionary<string, CompareList>
         {
@@ -116,6 +119,7 @@ public class CleanupCompareListsJobComponentTests
             ["guest"] = GuestList("guest-1"),
         };
         await ctx.SaveAsync(lists.Values.ToList());
+        ctx.Sql.Clear();
 
         await ctx.CleanupJob.Process();
 
@@ -123,9 +127,11 @@ public class CleanupCompareListsJobComponentTests
         remaining.Should().BeEquivalentTo(
             new[] { "buyer-1", "buyer-1 org-1", "buyer-3", "buyer-4", "employee-1 org-3", "guest" }.Select(x => lists[x].Id),
             "a list stays while its user exists and the list's organization, if any, is one the user can still pick");
-        // Only the organizations are read, and they load with any response group: the smallest one skips the rest
-        // of each member (addresses, notes, security accounts, ...).
-        ctx.Members.ResponseGroups.Should().NotBeEmpty().And.AllBe(nameof(MemberResponseGroup.Default));
+        // Only the organizations are read, and they load with any response group: the smallest one reads the members
+        // and their relations, and skips the rest of each member (notes, e-mails, addresses, phones, groups, SEO,
+        // dynamic properties) and its accounts, which would be more reads of the accounts' table.
+        ctx.Sql.Of<CustomerDbContext>().SelectMany(TablesRead).Distinct().Should().BeEquivalentTo("Member", "MemberRelation");
+        ctx.Sql.Of<SecurityDbContext>().Should().ContainSingle("the job looks the page's users up once, and no member's accounts");
     }
 
     [Fact]
@@ -133,7 +139,7 @@ public class CleanupCompareListsJobComponentTests
     {
         // The job deletes a page of 500 and searches again until a page comes back short. Two full pages and one
         // more list prove it keeps going; the fresh lists prove it stops at the lifetime.
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var expired = Enumerable.Range(0, (2 * BatchSize) + 1).Select(i => GuestList($"expired-{i:D4}")).ToList();
         var fresh = Enumerable.Range(0, 3).Select(i => GuestList($"fresh-{i}")).ToList();
         await ctx.SaveAsync([.. expired, .. fresh]);
@@ -151,14 +157,14 @@ public class CleanupCompareListsJobComponentTests
         // deleting a page's orphans moves the next lists up into it. With every third list orphaned across 1,200
         // lists, stopping after one page, or skipping a full page each time, leaves orphans behind; deleting a
         // kept list would show too.
-        using var ctx = ProductComparisonTestContext.Create();
+        await using var ctx = await ProductComparisonTestContext.CreateAsync();
         var lists = new List<CompareList>();
         for (var i = 0; i < 1200; i++)
         {
             var userId = $"user-{i:D4}";
             if (i % 3 != 0)
             {
-                ctx.Users.Add(userId);
+                await ctx.AddUserAsync(userId);
             }
 
             var list = AccountList(userId);
@@ -169,13 +175,18 @@ public class CleanupCompareListsJobComponentTests
         await ctx.SaveAsync(lists);
         // One creation instant for all, so the job's order (CreatedDate, then Id) is the id order above.
         await ctx.SetDatesAsync(x => true, createdDate: DateTime.UtcNow.AddDays(-1));
+        ctx.Sql.Clear();
 
         await ctx.CleanupJob.Process();
 
         (await RemainingListIdsAsync(ctx)).Should().BeEquivalentTo(lists.Where((_, i) => i % 3 != 0).Select(x => x.Id));
         // 1,200 lists come in pages of 500, 500 and 200: one lookup of their users each, not one per user or one for all.
-        ctx.Users.Queries.Should().Be(3, "the users are looked up a page of lists at a time");
+        ctx.Sql.Of<SecurityDbContext>().Should().HaveCount(3, "the users are looked up a page of lists at a time");
     }
+
+    // The tables a SQL command reads, as EF Core's SQLite SQL names them.
+    private static IEnumerable<string> TablesRead(string sql)
+        => Regex.Matches(sql, "(?:FROM|JOIN) \"(\\w+)\"").Select(x => x.Groups[1].Value);
 
     private static async Task<IList<string>> RemainingListIdsAsync(ProductComparisonTestContext ctx)
     {

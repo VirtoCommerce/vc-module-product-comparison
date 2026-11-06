@@ -17,7 +17,7 @@ internal static class TestTokenEndpoints
             var form = await request.ReadFormAsync();
 
             var token = form["grant_type"].ToString() == "refresh_token"
-                ? tokens.Refresh(form["refresh_token"].ToString())
+                ? await tokens.RefreshAsync(form["refresh_token"].ToString())
                 : null;
 
             return token == null
