@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using FluentAssertions;
 using Microsoft.Playwright;
 using VirtoCommerce.ProductComparison.Tests.StorefrontE2E.Infrastructure;
 using Xunit;
@@ -13,7 +15,8 @@ namespace VirtoCommerce.ProductComparison.Tests.StorefrontE2E.CompareLayout;
 /// The compare page's layout at each of QA's widths, with the stress content of <see cref="CompareLayoutEnvironment"/>:
 /// as it opens, with the differences shown and a row pinned, scrolled until the table's header sticks, with each of its
 /// dialogs open, and emptied. A test fails on a sideways scroll or on text cut off without an ellipsis, and lists every
-/// width and element that did it. These tests check what fits, not what works; the functional groups check that.
+/// width and element that did it. One more test checks that the plugin's stylesheets select only the plugin's own
+/// elements, never the storefront's. These tests check what fits, not what works; the functional groups check that.
 /// </summary>
 [Collection(CompareLayoutCollection.Name)]
 [Trait("Category", "StorefrontE2E")]
@@ -124,6 +127,40 @@ public sealed class CompareLayoutTests(CompareLayoutEnvironment env)
             await Expect(RestoreProducts(page)).ToBeVisibleAsync();
 
             await ExpectToFitAsync(page, nameof(EmptyState_FitsAtEveryWidth), [PageRoot]);
+        });
+    }
+
+    [Fact(Timeout = 300_000)]
+    public async Task PluginStylesheets_StyleOnlyThePluginsOwnElements()
+    {
+        await using var session = await env.OpenAsGuestAsync(env.GuestId, ComparePage);
+
+        await session.RunAsync(nameof(PluginStylesheets_StyleOnlyThePluginsOwnElements), async page =>
+        {
+            await ReadyAsync(page);
+
+            // Every selector of every stylesheet the page loaded from the plugin's build, its comma lists split apart.
+            var selectors = await page.EvaluateAsync<string[]>("""
+                (path) => {
+                  const selectors = [];
+                  const collect = (rules) => {
+                    for (const rule of rules) {
+                      selectors.push(...(rule.selectorText?.split(',') ?? []));
+                      if (rule.cssRules) collect(rule.cssRules);
+                    }
+                  };
+                  for (const sheet of document.styleSheets) {
+                    if (sheet.href?.includes(path)) collect(sheet.cssRules);
+                  }
+                  return selectors.map((x) => x.trim());
+                }
+                """, StorefrontPlugin.RequestPath);
+
+            // A plugin's CSS applies to the whole storefront, loads after the storefront's own and stays for the visit.
+            // A selector without one of the plugin's BEM blocks restyles the storefront: the plugin's copy of a plain
+            // .flex-col once beat the storefront's lg:flex-row and stacked the sign-up form's fields on a desktop.
+            selectors.Should().NotBeEmpty("the compare page's own styles have loaded by now");
+            selectors.Should().OnlyContain(x => Regex.IsMatch(x, @"\.compare-(?:table|products)(?![a-z])"), "the plugin styles only its own elements");
         });
     }
 

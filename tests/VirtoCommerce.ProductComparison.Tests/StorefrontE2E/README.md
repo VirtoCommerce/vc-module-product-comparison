@@ -100,7 +100,7 @@ Two pieces stand in for the platform's:
 | Group 1 | `GuestCompare/` | A store with the module's defaults. `GuestCompareTests`: a guest adds from the product page, the header counts it, the compare page shows it under its category, removing it empties page, count and list; a guest adds from a card on the category page; a full category refuses a sixth product before any request; "Add to cart" from the compare page puts the product in the guest's cart; the add's toast has a "Compare" link to the page, open on the product's category; a "No longer available" column for a product the catalog doesn't have, and its remove; "Clear category" with its confirmation empties that category alone; "Clear all" with its confirmation, then "Restore products". `SignInMergeTests`: a guest's list merges into the buyer's on the first signed-in load, the guest list is deleted and the remembered id forgotten; a merge that fails on its way (aborted, or a gateway's 502 page) keeps the id, and the next load merges; a merge into an account list at the 500-product cap is refused with `COMPARE_LIST_FULL`, both lists stay as they were, the id is forgotten and the buyer is told the list is full. Each asserted on the page and on the rows. |
 | Group 2 | `GuestListsOff/` | `ProductComparison.AnonymousListEnabled` off: a guest's click gets "Sign in to add products to compare" with a Sign in link back to the page (AC 3); nothing is sent, no list exists. |
 | Group 3 | `CompareOff/` | `ProductComparison.Enabled` off: no toggle and no slot kept for it on the product page, no header link, the plugin never runs (no `CompareList` sent), and `/compare` is the storefront's 404. |
-| Group 4 | `CompareLayout/` | The compare page's layout (`Kind=Layout`), with QA's stress content: an 80-character category name, a 100-character product name, two names that differ only at their ends, one with no break in it, an unbroken SKU and model number, long notes, big amounts, a product the catalog no longer has, property rows enough to scroll the page and categories enough to fill the tab row. The page as it opens, with the differences shown and a row pinned, scrolled until the table's header sticks, with the Clear category and the Clear all dialog open, and emptied, each at QA's 19 widths (see Layout tests). |
+| Group 4 | `CompareLayout/` | The compare page's layout (`Kind=Layout`), with QA's stress content: an 80-character category name, a 100-character product name, two names that differ only at their ends, one with no break in it, an unbroken SKU and model number, long notes, big amounts, a product the catalog no longer has, property rows enough to scroll the page and categories enough to fill the tab row. The page as it opens, with the differences shown and a row pinned, scrolled until the table's header sticks, with the Clear category and the Clear all dialog open, and emptied, each at QA's 19 widths; and that the plugin's stylesheets select only its own elements (see Layout tests). |
 
 Groups are xunit collections with `DisableParallelization = true`: each runs alone, so one backend and one browser
 exist at a time, and a clone's one Vite serves them in turn. Tests inside a group share the environment, its store and
@@ -164,7 +164,13 @@ dotnet test --filter "Kind=Layout"                           # layout only, e.g.
 dotnet test --filter "Category=StorefrontE2E&Kind!=Layout"   # functional only
 ```
 
-Each test opens one state of the compare page and walks QA's audit widths: every ui-kit breakpoint (480, 640, 768,
+One test checks the plugin's CSS rather than a width. A plugin's stylesheets apply to the whole storefront page, load
+after the storefront's own CSS and stay for the visit, so each of their selectors must name one of the plugin's BEM
+blocks (`compare-table`, `compare-products`): one that doesn't restyles the storefront. A plain `.flex-col` from the
+plugin's own copy of Tailwind's utilities once beat the storefront's `lg:flex-row` and stacked the sign-up form's
+fields on a desktop. A failure lists every selector that strays.
+
+The others each open one state of the compare page and walk QA's audit widths: every ui-kit breakpoint (480, 640, 768,
 1024, 1280, 1500), the pixel below it, the middles between them, and 375 and 1920 (ai-tools
 `scripts/lib/design-tokens.generated.ts`, `AUDIT_VIEWPORTS_PX`). At each width it applies QA's overflow audit, rule
 BL-UI-004 (ai-tools `scripts/lib/measure-layout.ts`):

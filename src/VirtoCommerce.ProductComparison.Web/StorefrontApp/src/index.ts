@@ -1,4 +1,3 @@
-import "./styles.css";
 import { globals, registerProductConfigurationSource, useExtensionRegistry } from "@vc-frontend/core";
 import { defineAsyncComponent } from "vue";
 import { getItemConfiguration, loadCompareList, useCompareCount } from "./composables/useCompareList";

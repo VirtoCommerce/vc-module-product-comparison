@@ -1,7 +1,6 @@
 const path = require("path");
 
-// Same pipeline as the host, with Tailwind pinned to THIS plugin's config so it scans
-// the plugin's own sources and generates the utilities its templates use.
+// Same pipeline as the host, with Tailwind pinned to THIS plugin's config, for `@apply` in the components' style blocks.
 module.exports = {
   plugins: {
     "postcss-import": {},

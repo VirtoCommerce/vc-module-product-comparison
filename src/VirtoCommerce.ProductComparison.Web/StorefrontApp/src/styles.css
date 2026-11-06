@@ -1,7 +1,0 @@
-/*
- * Plugin utility layer: only components + utilities - NOT base, so the host's
- * Tailwind preflight/reset is not re-injected (it is already applied globally).
- * The CSS custom properties these utilities reference are defined by the host.
- */
-@tailwind components;
-@tailwind utilities;

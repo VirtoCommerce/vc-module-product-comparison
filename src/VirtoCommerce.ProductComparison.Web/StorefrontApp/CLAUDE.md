@@ -14,7 +14,9 @@ How it plugs in, its files, rules and commands: @README.md
 1. Import from a storefront path (`@/…`). A symbol the facade lacks is either added to it in vc-frontend
    ([S3](https://github.com/VirtoCommerce/vc-frontend/blob/dev/client-app/core/federation/scenarios/s3-extend-the-facade.md)) or copied here, small.
 2. Edit `@vc-frontend/core` types, or commit its pin as `portal:`, `link:` or a yalc path.
-3. Edit `src/api/graphql/types.ts` by hand: run `yarn generate:graphql-types`.
+3. Ship a global stylesheet with `@tailwind utilities`, or style with utility classes in templates: the plugin's plain
+   utilities override the storefront's responsive ones on every page. Style with `@apply` on the plugin's BEM classes.
+4. Edit `src/api/graphql/types.ts` by hand: run `yarn generate:graphql-types`.
 
 ## Where each task is described
 

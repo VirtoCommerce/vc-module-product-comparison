@@ -315,9 +315,10 @@
                 class="compare-table__boolean"
               >
                 <VcIcon
+                  class="compare-table__boolean-icon"
+                  :class="{ 'compare-table__boolean-icon--true': row.boolValues[index] }"
                   size="sm"
                   :name="row.boolValues[index] ? 'check' : 'x'"
-                  :class="row.boolValues[index] ? 'text-success' : 'text-neutral-400'"
                 />
 
                 {{ row.values[index] }}
@@ -712,6 +713,14 @@ watch(
 
   &__boolean {
     @apply flex items-center gap-2;
+  }
+
+  &__boolean-icon {
+    @apply text-neutral-400;
+
+    &--true {
+      @apply text-success;
+    }
   }
 }
 </style>

@@ -40,7 +40,7 @@ More setups (hot reload, a deployed module, an unreleased facade): [S2](https://
 | `CLAUDE.md` | for AI agents: this README, plus what to run and never do |
 | `storefront-plugin.targets` | the module build: builds this plugin and puts it in the module package |
 | `codegen.ts`, `src/api/graphql/` | your GraphQL documents and their generated types |
-| `tailwind.config.cjs`, `src/styles.css` | Tailwind with the storefront's design tokens |
+| `tailwind.config.cjs`, `postcss.config.cjs` | Tailwind with the storefront's design tokens, for `@apply` in components |
 
 ### Rules
 
@@ -103,7 +103,10 @@ a declared menu title in `plugin.config.ts` is such a key too.
 Plugin CSS applies to the whole storefront page: nothing fences it yet. Prefer `<style scoped>`, and colour with
 the storefront's CSS variables (`var(--color-…)`), not fixed values, so dark mode and the theme presets work.
 
-Tailwind here uses the storefront's preset and emits only components and utilities, never its base reset.
+Tailwind here uses the storefront's preset through `@apply` in the components' style blocks, on this plugin's own
+BEM classes (`compare-table__…`, `compare-products__…`). Don't add a global stylesheet with `@tailwind utilities`, and
+don't style with utility classes in templates: the plugin's copy of a plain utility (`.flex-col`) loads after the
+storefront's CSS and overrides its responsive ones (`lg:flex-row`) on every page.
 
 ### Shipping
 
