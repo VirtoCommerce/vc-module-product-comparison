@@ -58,7 +58,7 @@ public sealed class SignInMergeTests(GuestCompareEnvironment env)
 
             // Through the merge mutation, once, and without an error on the way.
             session.Operations.Where(x => x == "MergeCompareList").Should().ContainSingle();
-            session.GraphQlErrors.Should().BeEmpty();
+            (await session.GetGraphQlErrorsAsync()).Should().BeEmpty();
         });
 
         // On the server: the buyer's own list (signed in, no organization) holds the product, in the guest's category;
@@ -128,7 +128,7 @@ public sealed class SignInMergeTests(GuestCompareEnvironment env)
             await Expect(HeaderCompareLink(page, 0)).ToBeVisibleAsync();
 
             // A failure on the way is no GraphQL error.
-            session.GraphQlErrors.Should().BeEmpty();
+            (await session.GetGraphQlErrorsAsync()).Should().BeEmpty();
         });
 
         // The server never saw the merge: the guest's list is whole, and the buyer has none yet.
@@ -145,7 +145,7 @@ public sealed class SignInMergeTests(GuestCompareEnvironment env)
 
             (await session.GetLocalStorageAsync(GuestListIdKey)).Should().BeNull();
             session.Operations.Count(x => x == "MergeCompareList").Should().Be(2);
-            session.GraphQlErrors.Should().BeEmpty();
+            (await session.GetGraphQlErrorsAsync()).Should().BeEmpty();
         });
 
         var buyerList = (await env.GetListsAsync(buyerId)).Should().ContainSingle().Subject;
@@ -197,7 +197,7 @@ public sealed class SignInMergeTests(GuestCompareEnvironment env)
             session.Operations.Where(x => x == "MergeCompareList").Should().ContainSingle();
 
             // The refusal, as the server sent it: the merge's one error, with the code the plugin read.
-            (await session.WaitForGraphQlErrorsAsync(1)).Should().ContainSingle()
+            (await session.GetGraphQlErrorsAsync()).Should().ContainSingle()
                 .Which.Should().StartWith("MergeCompareList").And.Contain("COMPARE_LIST_FULL");
         });
 

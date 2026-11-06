@@ -40,7 +40,7 @@ public sealed class CompareOffTests(CompareOffEnvironment env)
 
             // Nothing of the plugin ran: it loads the list first thing, and it never asked for it.
             session.Operations.Should().Contain("GetProduct").And.NotContain("CompareList");
-            session.GraphQlErrors.Should().BeEmpty();
+            (await session.GetGraphQlErrorsAsync()).Should().BeEmpty();
         }
 
         // The page by its address, in a session of its own: the storefront doesn't know the route.
@@ -50,7 +50,7 @@ public sealed class CompareOffTests(CompareOffEnvironment env)
         {
             await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Page not found", Exact = true })).ToBeVisibleAsync(new() { Timeout = 60_000 });
             await Expect(CompareTitle(page)).ToHaveCountAsync(0);
-            compare.GraphQlErrors.Should().BeEmpty();
+            (await compare.GetGraphQlErrorsAsync()).Should().BeEmpty();
         });
     }
 }

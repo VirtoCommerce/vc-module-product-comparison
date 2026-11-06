@@ -43,7 +43,7 @@ public sealed class GuestListsOffTests(GuestListsOffEnvironment env)
         // The plugin refused before calling the server, and a guest who never compared asks it nothing, not even for
         // the list; the server holds no list for the guest.
         session.Operations.Should().NotContain("CompareList").And.NotContain("SaveProductsToCompareList");
-        session.GraphQlErrors.Should().BeEmpty();
+        (await session.GetGraphQlErrorsAsync()).Should().BeEmpty();
         (await env.GetListsAsync(guestId)).Should().BeEmpty();
     }
 }

@@ -21,6 +21,8 @@ internal sealed class StorefrontSession : IAsyncDisposable
     private readonly List<string> _operations = [];
     private readonly List<string> _graphQlErrors = [];
     private readonly List<string> _failedRequests = [];
+    // A GraphQL response's body is read after the page got it, outside the test's flow: each read in progress.
+    private readonly List<Task> _bodyReads = [];
 
     public StorefrontSession(IBrowserContext context, IPage page)
     {
@@ -45,15 +47,18 @@ internal sealed class StorefrontSession : IAsyncDisposable
         }
     }
 
-    /// <summary>The GraphQL operations that came back with errors so far, one line each.</summary>
-    public IReadOnlyList<string> GraphQlErrors
+    /// <summary>
+    /// The GraphQL operations that came back with errors, one line each, once the body of every response the page got
+    /// so far has been read: a response the page already acted on can't slip past a check for no errors because its
+    /// body was still being read. A body that couldn't be read counts as an error.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GetGraphQlErrorsAsync()
     {
-        get
+        await WaitForBodyReadsAsync();
+
+        lock (_graphQlErrors)
         {
-            lock (_graphQlErrors)
-            {
-                return [.. _graphQlErrors];
-            }
+            return [.. _graphQlErrors];
         }
     }
 
@@ -95,20 +100,6 @@ internal sealed class StorefrontSession : IAsyncDisposable
     public Task<string> GetLocalStorageAsync(string key)
         => Page.EvaluateAsync<string>("key => localStorage.getItem(key)", key);
 
-    /// <summary>
-    /// The GraphQL errors recorded once there are at least <paramref name="count"/>, or after 10 seconds: a response's
-    /// body is read after the page got it, so an error the page already showed may not be recorded yet.
-    /// </summary>
-    public async Task<IReadOnlyList<string>> WaitForGraphQlErrorsAsync(int count)
-    {
-        for (var waited = 0; GraphQlErrors.Count < count && waited < 10_000; waited += 50)
-        {
-            await Task.Delay(50);
-        }
-
-        return GraphQlErrors;
-    }
-
     private void Attach(IPage page)
     {
         Page = page;
@@ -137,7 +128,29 @@ internal sealed class StorefrontSession : IAsyncDisposable
 
         page.RequestFailed += (_, request) => Record(_failedRequests, $"{request.Method} {request.Url}: {request.Failure}");
 
-        page.Response += (_, response) => _ = RecordGraphQlErrorsAsync(response);
+        // Playwright raises the event when the response's headers arrive, before the page can act on its body, so a
+        // read is in the list by the time the test sees what the response changed.
+        page.Response += (_, response) =>
+        {
+            if (IsGraphQl(response.Request))
+            {
+                lock (_bodyReads)
+                {
+                    _bodyReads.Add(RecordGraphQlErrorsAsync(response));
+                }
+            }
+        };
+    }
+
+    private async Task WaitForBodyReadsAsync()
+    {
+        Task[] reads;
+        lock (_bodyReads)
+        {
+            reads = [.. _bodyReads];
+        }
+
+        await Task.WhenAll(reads);
     }
 
     private async Task<string> ReportAsync(string name)
@@ -160,6 +173,7 @@ internal sealed class StorefrontSession : IAsyncDisposable
         report.AppendLine($"URL: {Page.Url}");
         report.AppendLine($"Title: {await SafeAsync(() => Page.TitleAsync())}");
         report.AppendLine($"Body (start): {Truncate(await SafeAsync(() => Page.InnerTextAsync("body")), 800)}");
+        await WaitForBodyReadsAsync();
         Append(report, "GraphQL operations", _operations);
         Append(report, "GraphQL errors", _graphQlErrors);
         Append(report, "Dialogs", _dialogs);
@@ -171,24 +185,26 @@ internal sealed class StorefrontSession : IAsyncDisposable
 
     private async Task RecordGraphQlErrorsAsync(IResponse response)
     {
+        string body;
         try
         {
-            if (!IsGraphQl(response.Request))
-            {
-                return;
-            }
-
-            var body = await response.TextAsync();
-            if (!body.Contains("\"errors\""))
-            {
-                return;
-            }
-
-            Record(_graphQlErrors, $"{GetOperationName(response.Request)} ({response.Status}): {Truncate(body, 600)}");
+            body = await response.TextAsync();
         }
-        catch
+        catch (PlaywrightException) when (response.Frame.Page.IsClosed)
         {
-            // Diagnostics only.
+            // The test closed the page (the next visit opens a new one) before the body came: it has moved on.
+            return;
+        }
+        catch (PlaywrightException exception)
+        {
+            // A body the page got but nobody can read can't be shown to be free of errors: a test must hear of it.
+            Record(_graphQlErrors, $"{GetOperationName(response.Request)} ({response.Status}): the body couldn't be read: {exception.Message}");
+            return;
+        }
+
+        if (body.Contains("\"errors\""))
+        {
+            Record(_graphQlErrors, $"{GetOperationName(response.Request)} ({response.Status}): {Truncate(body, 600)}");
         }
     }
 

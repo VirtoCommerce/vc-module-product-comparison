@@ -17,9 +17,11 @@ namespace VirtoCommerce.ProductComparison.Tests.Infrastructure;
 /// <summary>
 /// The catalog module's raw SQL for SQLite, which the module ships for SQL Server, PostgreSQL and MySQL only: the same
 /// statements as its PostgreSQL command (vc-module-catalog 3.1048.0), with SQLite's paging and a LIKE where PostgreSQL
-/// splits the tags. Ported is what the storefront's pages reach: a category save clears its children's cache, a
-/// product's outline walks its parents, the product page searches the product's associations. The deletes and the SEO
-/// duplicates check, which nothing here runs, throw with their name.
+/// splits the tags, and subqueries where PostgreSQL deletes with a join. Ported is what the tests reach: a category
+/// save clears its children's cache, a product's outline walks its parents, the product page searches the product's
+/// associations, and a product or category deleted through the catalog removes its rows (the compare list's
+/// product-deleted handler tests). A catalog's delete, a property's values delete and the SEO duplicates check, which
+/// nothing here runs, throw with their name.
 /// </summary>
 internal sealed class SqliteCatalogRawDatabaseCommand : ICatalogRawDatabaseCommand
 {
@@ -111,9 +113,63 @@ internal sealed class SqliteCatalogRawDatabaseCommand : ICatalogRawDatabaseComma
 
     public Task<IList<string>> GetAllSeoDuplicatesIdsAsync(CatalogDbContext dbContext) => throw NotPorted();
 
-    public Task RemoveItemsAsync(CatalogDbContext dbContext, IList<string> itemIds) => throw NotPorted();
+    // A product goes with its variations and what hangs off them; PostgreSQL's DELETE ... USING joins are subqueries.
+    public async Task RemoveItemsAsync(CatalogDbContext dbContext, IList<string> itemIds)
+    {
+        if (itemIds.IsNullOrEmpty())
+        {
+            return;
+        }
 
-    public Task RemoveCategoriesAsync(CatalogDbContext dbContext, IList<string> ids) => throw NotPorted();
+        const string commandTemplate =
+            """
+            DELETE FROM "CatalogSeoInfo" WHERE "ItemId" IN (SELECT "Id" FROM "Item" WHERE "Id" IN ({0}) OR "ParentId" IN ({0}));
+            DELETE FROM "CategoryItemRelation" WHERE "ItemId" IN (SELECT "Id" FROM "Item" WHERE "Id" IN ({0}) OR "ParentId" IN ({0}));
+            DELETE FROM "CatalogImage" WHERE "ItemId" IN (SELECT "Id" FROM "Item" WHERE "Id" IN ({0}) OR "ParentId" IN ({0}));
+            DELETE FROM "CatalogAsset" WHERE "ItemId" IN (SELECT "Id" FROM "Item" WHERE "Id" IN ({0}) OR "ParentId" IN ({0}));
+            DELETE FROM "PropertyValue" WHERE "ItemId" IN (SELECT "Id" FROM "Item" WHERE "Id" IN ({0}) OR "ParentId" IN ({0}));
+            DELETE FROM "EditorialReview" WHERE "ItemId" IN (SELECT "Id" FROM "Item" WHERE "Id" IN ({0}) OR "ParentId" IN ({0}));
+            DELETE FROM "Association" WHERE "ItemId" IN (SELECT "Id" FROM "Item" WHERE "Id" IN ({0}) OR "ParentId" IN ({0}));
+            DELETE FROM "Association" WHERE "AssociatedItemId" IN (SELECT "Id" FROM "Item" WHERE "Id" IN ({0}) OR "ParentId" IN ({0}));
+            DELETE FROM "ProductConfigurationOption" WHERE "ProductId" IN ({0});
+            DELETE FROM "Item" WHERE "ParentId" IN ({0});
+            DELETE FROM "Item" WHERE "Id" IN ({0});
+            """;
+
+        foreach (var idsPage in itemIds.Paginate(BatchSize))
+        {
+            var command = CreateCommand(commandTemplate, idsPage);
+            await dbContext.Database.ExecuteSqlRawAsync(command.Text, command.Parameters);
+        }
+    }
+
+    // The catalog removes a category's products first (RemoveItemsAsync), deepest categories first.
+    public async Task RemoveCategoriesAsync(CatalogDbContext dbContext, IList<string> ids)
+    {
+        if (ids.IsNullOrEmpty())
+        {
+            return;
+        }
+
+        const string commandTemplate =
+            """
+            DELETE FROM "CatalogSeoInfo" WHERE "CategoryId" IN ({0});
+            DELETE FROM "CatalogImage" WHERE "CategoryId" IN ({0});
+            DELETE FROM "PropertyValue" WHERE "CategoryId" IN ({0});
+            DELETE FROM "CategoryRelation" WHERE "SourceCategoryId" IN ({0}) OR "TargetCategoryId" IN ({0});
+            DELETE FROM "CategoryItemRelation" WHERE "CategoryId" IN ({0});
+            DELETE FROM "Association" WHERE "AssociatedCategoryId" IN ({0});
+            DELETE FROM "Property" WHERE "CategoryId" IN ({0});
+            DELETE FROM "CategoryDescription" WHERE "CategoryId" IN ({0});
+            DELETE FROM "Category" WHERE "Id" IN ({0});
+            """;
+
+        foreach (var idsPage in ids.Paginate(BatchSize))
+        {
+            var command = CreateCommand(commandTemplate, idsPage);
+            await dbContext.Database.ExecuteSqlRawAsync(command.Text, command.Parameters);
+        }
+    }
 
     public Task RemoveCatalogsAsync(CatalogDbContext dbContext, IList<string> ids) => throw NotPorted();
 
@@ -253,7 +309,7 @@ internal sealed class SqliteCatalogRawDatabaseCommand : ICatalogRawDatabaseComma
     }
 
     private static NotSupportedException NotPorted([System.Runtime.CompilerServices.CallerMemberName] string method = null)
-        => new($"ICatalogRawDatabaseCommand.{method} is not ported to SQLite: nothing the storefront E2E pages do runs it.");
+        => new($"ICatalogRawDatabaseCommand.{method} is not ported to SQLite: no test ran it so far.");
 
     private sealed class Command
     {

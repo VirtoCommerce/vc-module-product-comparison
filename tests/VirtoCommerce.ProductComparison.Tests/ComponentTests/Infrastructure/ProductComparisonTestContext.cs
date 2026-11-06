@@ -13,15 +13,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using VirtoCommerce.CatalogModule.Core.Events;
-using VirtoCommerce.CatalogModule.Core.Model;
 using VirtoCommerce.CoreModule.Core.Currency;
 using VirtoCommerce.CustomerModule.Core.Model;
 using VirtoCommerce.CustomerModule.Core.Services;
 using VirtoCommerce.Platform.Caching;
 using VirtoCommerce.Platform.Core;
 using VirtoCommerce.Platform.Core.Common;
-using VirtoCommerce.Platform.Core.Events;
+using VirtoCommerce.Platform.Core.Jobs;
 using VirtoCommerce.Platform.Core.Security;
 using VirtoCommerce.Platform.Core.Settings;
 using VirtoCommerce.ProductComparison.Core.Models;
@@ -127,8 +125,18 @@ internal sealed class ProductComparisonTestContext : IAsyncDisposable
 
     public ICompareListSearchService CompareListSearchService => GetRequiredService<ICompareListSearchService>();
 
-    /// <summary>A fresh job, as the recurring job's handler resolves it on each run.</summary>
-    public CleanupCompareListsJob CleanupJob => GetRequiredService<CleanupCompareListsJob>();
+    /// <summary>
+    /// One occurrence of the recurring cleanup, as the background-job engine runs it: the handler the module registers
+    /// for the job's payload, resolved in a scope of its own, given a fresh payload from the type factory. The handler
+    /// takes the job's lock and runs the job. It reads nothing of the run's context (the engine's job id, progress,
+    /// headers), and the engine's own context isn't public, so none is passed.
+    /// </summary>
+    public async Task RunCleanupJobAsync()
+    {
+        using var scope = _provider.CreateScope();
+        var handler = scope.ServiceProvider.GetRequiredService<IBackgroundJobHandler<CleanupCompareListsJobPayload>>();
+        await handler.Execute(AbstractTypeFactory<CleanupCompareListsJobPayload>.TryCreateInstance(), context: null);
+    }
 
     /// <summary>The catalog, set up through the catalog and pricing modules: <see cref="TestCatalog.InitializeAsync"/> first.</summary>
     public TestCatalog Catalog => GetRequiredService<TestCatalog>();
@@ -269,16 +277,6 @@ internal sealed class ProductComparisonTestContext : IAsyncDisposable
             });
 
         ExpireCaches();
-    }
-
-    /// <summary>Raises the catalog's product event, as the catalog's ItemService does on a save or a delete.</summary>
-    public Task PublishProductChangedAsync(EntryState state, params string[] productIds)
-    {
-        var entries = productIds
-            .Select(id => new GenericChangedEntry<CatalogProduct>(new CatalogProduct { Id = id }, state))
-            .ToList();
-
-        return GetRequiredService<IEventPublisher>().Publish(new ProductChangedEvent(entries));
     }
 
     /// <summary>Fresh DbContext on the module's database, for seeding and for asserting on rows.</summary>

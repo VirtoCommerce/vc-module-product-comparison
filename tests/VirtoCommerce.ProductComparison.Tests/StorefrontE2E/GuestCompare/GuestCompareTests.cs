@@ -66,7 +66,7 @@ public sealed class GuestCompareTests(GuestCompareEnvironment env)
             await Expect(HeaderCompareLink(page, 0)).ToBeVisibleAsync();
 
             // Every request of the way, the storefront's and the plugin's, was answered without an error.
-            session.GraphQlErrors.Should().BeEmpty();
+            (await session.GetGraphQlErrorsAsync()).Should().BeEmpty();
         });
 
         // Gone from the list on the server; the list itself stays, so the guest's next save needs no new one.
@@ -104,7 +104,7 @@ public sealed class GuestCompareTests(GuestCompareEnvironment env)
             await Expect(ProductColumn(page, LaserJet100Name)).ToBeVisibleAsync();
 
             // A product that doesn't resolve is not an error: the list's product field is null for it.
-            session.GraphQlErrors.Should().BeEmpty();
+            (await session.GetGraphQlErrorsAsync()).Should().BeEmpty();
         });
 
         var list = (await env.GetListsAsync(guestId)).Should().ContainSingle().Subject;
@@ -149,7 +149,7 @@ public sealed class GuestCompareTests(GuestCompareEnvironment env)
             await Expect(CategoryTab(page, LaserPrintersName, 2)).ToBeVisibleAsync();
             await Expect(CategoryTab(page, CopyPaperName, 1)).ToBeVisibleAsync();
             await Expect(HeaderCompareLink(page, 3)).ToBeVisibleAsync();
-            session.GraphQlErrors.Should().BeEmpty();
+            (await session.GetGraphQlErrorsAsync()).Should().BeEmpty();
         });
 
         (await env.GetListsAsync(guestId)).Should().ContainSingle().Which.Items.Select(x => (x.ProductId, x.CategoryId)).Should().BeEquivalentTo(
@@ -183,7 +183,7 @@ public sealed class GuestCompareTests(GuestCompareEnvironment env)
             await Expect(HeaderCompareLink(page, 1)).ToBeVisibleAsync();
             await Expect(AddToCompare(ProductCard(page, LaserJet100Name))).ToHaveAttributeAsync("aria-pressed", "false");
 
-            session.GraphQlErrors.Should().BeEmpty();
+            (await session.GetGraphQlErrorsAsync()).Should().BeEmpty();
         });
 
         var list = (await env.GetListsAsync(guestId)).Should().ContainSingle().Subject;
@@ -213,7 +213,7 @@ public sealed class GuestCompareTests(GuestCompareEnvironment env)
             await Expect(HeaderCartLink(page, 1)).ToBeVisibleAsync();
 
             session.Operations.Should().Contain("AddItem");
-            session.GraphQlErrors.Should().BeEmpty();
+            (await session.GetGraphQlErrorsAsync()).Should().BeEmpty();
         });
 
         var cart = (await env.GetCartsAsync(guestId)).Should().ContainSingle().Subject;
@@ -250,7 +250,7 @@ public sealed class GuestCompareTests(GuestCompareEnvironment env)
             await Expect(HeaderCompareLink(page, 5)).ToBeVisibleAsync();
 
             session.Operations.Should().NotContain("SaveProductsToCompareList");
-            session.GraphQlErrors.Should().BeEmpty();
+            (await session.GetGraphQlErrorsAsync()).Should().BeEmpty();
         });
 
         var list = (await env.GetListsAsync(guestId)).Should().ContainSingle().Subject;
@@ -290,7 +290,7 @@ public sealed class GuestCompareTests(GuestCompareEnvironment env)
 
             session.Operations.Where(x => x == "ClearCompareListCategory").Should().ContainSingle();
             session.Operations.Should().NotContain("ClearCompareList");
-            session.GraphQlErrors.Should().BeEmpty();
+            (await session.GetGraphQlErrorsAsync()).Should().BeEmpty();
         });
 
         (await env.GetListsAsync(guestId)).Should().ContainSingle().Which.Items.Select(x => (x.ProductId, x.CategoryId))
@@ -322,7 +322,7 @@ public sealed class GuestCompareTests(GuestCompareEnvironment env)
             await Expect(ProductColumn(page, LaserJet100Name)).ToBeVisibleAsync();
             await Expect(HeaderCompareLink(page, 2)).ToBeVisibleAsync();
 
-            session.GraphQlErrors.Should().BeEmpty();
+            (await session.GetGraphQlErrorsAsync()).Should().BeEmpty();
         });
 
         (await env.GetListsAsync(guestId)).Should().ContainSingle().Which.Items.Select(x => (x.ProductId, x.CategoryId)).Should().BeEquivalentTo(

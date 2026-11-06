@@ -18,9 +18,12 @@ using static VirtoCommerce.ProductComparison.Tests.ComponentTests.Infrastructure
 namespace VirtoCommerce.ProductComparison.Tests.ComponentTests;
 
 /// <summary>
-/// The daily cleanup (VCST-5918, PLAN §4.4 and §11.9), run as the recurring job runs it: <c>Process</c> on the real
-/// <c>CleanupCompareListsJob</c> over SQLite, with the accounts and contacts it checks in the platform's security
-/// database and the customer module, created as an administrator creates them. It deletes guest
+/// The daily cleanup (VCST-5918, PLAN §4.4 and §11.9), each run an occurrence of the recurring job as the
+/// background-job engine runs one (<see cref="ProductComparisonTestContext.RunCleanupJobAsync"/>): the module's handler,
+/// which takes the job's lock and runs the real <c>CleanupCompareListsJob</c> over SQLite, with the accounts and
+/// contacts it checks in the platform's security database and the customer module, created as an administrator
+/// creates them. What the lock does when a run already holds it: <see cref="CleanupCompareListsJobLockComponentTests"/>.
+/// It deletes guest
 /// lists left unchanged past the lifetime setting, then registered lists nobody can reach any more: their user is
 /// gone, or their organization is one the user's contact no longer belongs to, so no sign-in token can carry it.
 /// Everything else stays.
@@ -44,7 +47,7 @@ public class CleanupCompareListsJobComponentTests
         await ctx.SetDatesAsync(fresh.Id, modifiedDate: DateTime.UtcNow.AddHours(-47));
         await ctx.SetDatesAsync(registered.Id, modifiedDate: DateTime.UtcNow.AddDays(-365));
 
-        await ctx.CleanupJob.Process();
+        await ctx.RunCleanupJobAsync();
 
         (await RemainingListIdsAsync(ctx)).Should().BeEquivalentTo([fresh.Id, registered.Id]);
         await using var db = ctx.NewDbContext();
@@ -63,7 +66,7 @@ public class CleanupCompareListsJobComponentTests
         await ctx.SetDatesAsync(threeHoursOld.Id, modifiedDate: DateTime.UtcNow.AddHours(-3));
         await ctx.SetDatesAsync(oneHourOld.Id, modifiedDate: DateTime.UtcNow.AddHours(-1));
 
-        await ctx.CleanupJob.Process();
+        await ctx.RunCleanupJobAsync();
 
         (await RemainingListIdsAsync(ctx)).Should().Equal(oneHourOld.Id);
     }
@@ -81,7 +84,7 @@ public class CleanupCompareListsJobComponentTests
         changed.Items.Add(Item("printer-2", "printers", 1));
         await ctx.SaveAsync(changed);
 
-        await ctx.CleanupJob.Process();
+        await ctx.RunCleanupJobAsync();
 
         (await RemainingListIdsAsync(ctx)).Should().Equal(list.Id);
     }
@@ -121,7 +124,7 @@ public class CleanupCompareListsJobComponentTests
         await ctx.SaveAsync(lists.Values.ToList());
         ctx.Sql.Clear();
 
-        await ctx.CleanupJob.Process();
+        await ctx.RunCleanupJobAsync();
 
         var remaining = await RemainingListIdsAsync(ctx);
         remaining.Should().BeEquivalentTo(
@@ -145,7 +148,7 @@ public class CleanupCompareListsJobComponentTests
         await ctx.SaveAsync([.. expired, .. fresh]);
         await ctx.SetDatesAsync(x => x.UserId.StartsWith("expired-"), modifiedDate: DateTime.UtcNow.AddDays(-3));
 
-        await ctx.CleanupJob.Process();
+        await ctx.RunCleanupJobAsync();
 
         (await RemainingListIdsAsync(ctx)).Should().BeEquivalentTo(fresh.Select(x => x.Id));
     }
@@ -177,7 +180,7 @@ public class CleanupCompareListsJobComponentTests
         await ctx.SetDatesAsync(x => true, createdDate: DateTime.UtcNow.AddDays(-1));
         ctx.Sql.Clear();
 
-        await ctx.CleanupJob.Process();
+        await ctx.RunCleanupJobAsync();
 
         (await RemainingListIdsAsync(ctx)).Should().BeEquivalentTo(lists.Where((_, i) => i % 3 != 0).Select(x => x.Id));
         // 1,200 lists come in pages of 500, 500 and 200: one lookup of their users each, not one per user or one for all.

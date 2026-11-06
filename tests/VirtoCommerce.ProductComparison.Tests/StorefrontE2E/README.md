@@ -59,9 +59,9 @@ sign-in token endpoint and the list of installed modules (see Doubles below).
   account, in the store.
 
 Where a module ships provider-specific SQL (SQL Server, PostgreSQL, MySQL), the harness runs the module's PostgreSQL
-statements on SQLite: `SqliteCatalogRawDatabaseCommand` (a category's children and parents, a product's associations)
-and `SqliteCartRawDatabaseCommand` (the wishlists that hold a page's products). Statements nothing here reaches throw
-with their name instead.
+statements on SQLite: `SqliteCatalogRawDatabaseCommand` (a category's children and parents, a product's associations,
+the deletes of products and categories) and `SqliteCartRawDatabaseCommand` (the wishlists that hold a page's
+products). Statements nothing here reaches throw with their name instead.
 
 Blob storage is the file system providers' (assets and content), over temporary folders: nothing seeded has a file.
 The tax module is not installed, as on a store without it: X-Catalog and X-Cart take it as optional.
@@ -92,11 +92,11 @@ Two pieces stand in for the platform's:
 | Vite | `Infrastructure/ViteDevServer.cs`, `Infrastructure/SharedViteDevServer.cs` | A clone's dev server, one per run, on a free port of its own: `node node_modules/vite/bin/vite.js --port N --strictPort` with `APP_BACKEND_URL`, which is fixed at start, so each group's backend takes that port in turn; stopped by an xunit assembly fixture once every test has run; bounded kill. |
 | Group fixture | `Infrastructure/StorefrontEnvironment.cs` | Backend + store settings + catalog + browser per xunit collection; `OpenAsGuestAsync(guestId, path)` = a fresh browser context as a guest the storefront knows by that id; `NewGuestId`, `NewBuyerAsync` give a test a guest or a buyer of its own (a contact and its account), `IssueTokenAsync` signs the buyer in; `SaveAsGuestAsync` and `SaveAsBuyerAsync` seed a guest's or a buyer's list through the real mutation; `GetListsAsync` reads `CompareList`/`CompareListItem` rows between requests, `GetCartsAsync` a user's carts through the cart module; `ConfigureStoreAsync` for a group's store settings, saved as an administrator saves them, `SeedAsync` for its own products and lists, before the index is built; phase log. |
 | Request gate | `Infrastructure/RequestGate.cs` | One turn at a time: the host's requests wait at it, and test-side work takes a turn through `RunExclusiveAsync`. |
-| Session | `Infrastructure/StorefrontSession.cs` | Records console errors, dialogs, failed requests, the GraphQL operations sent and those that returned errors; a failing test gets them plus a screenshot in its message. `OpenInNewPageAsync` is the next visit in the same browser (same localStorage); `GetLocalStorageAsync` reads what the storefront remembers; `WaitForGraphQlErrorsAsync` waits for an error the page already showed to be recorded; `GetOperationName` names a routed request's operation. |
+| Session | `Infrastructure/StorefrontSession.cs` | Records console errors, dialogs, failed requests, the GraphQL operations sent and those that returned errors; a failing test gets them plus a screenshot in its message. `OpenInNewPageAsync` is the next visit in the same browser (same localStorage); `GetLocalStorageAsync` reads what the storefront remembers; `GetGraphQlErrorsAsync` gives the operations that came back with errors once the body of every response the page got so far has been read, so a check for none can't run ahead of a response the page already acted on, and a body it couldn't read counts as an error; `GetOperationName` names a routed request's operation. |
 | Controls | `Infrastructure/CompareControls.cs` | The compare toggle in the price block or a catalog card, the header's Compare and Cart links and their counts, the toasts and their Compare link, and the compare page's tabs, columns and buttons, by role and label. |
 | Layout audit | `Infrastructure/LayoutAudit.cs` | QA's audit widths and overflow audit (rule BL-UI-004) for the layout tests: prepares a page for measuring, walks the widths, and lists every width and element that broke (see Layout tests). A copy of vc-module-sales-rep's, with this module's namespace and the class prefix that names a culprit's plugin element (`compare-`). |
 | Documents | `Infrastructure/StorefrontDocuments.cs` | Loads the storefront's own `.graphql` operations from the clone and the plugin's from `StorefrontApp` (fragments inlined, `@gate` applied). |
-| Contract | `StorefrontBootContractTests.cs` | Browser-less: the backend answers the storefront's boot documents, the product page's `GetProduct`, a signed-in buyer's `GetCurrentUserAddresses` and the plugin's own operations, for a guest and a buyer (≈2 s). |
+| Contract | `StorefrontBootContractTests.cs` | Browser-less: the backend answers the storefront's boot documents, the product page's `GetProduct`, a signed-in buyer's `GetCurrentUserAddresses` and the plugin's own operations, for a guest and a buyer (a few seconds). |
 | Group 1 | `GuestCompare/` | A store with the module's defaults. `GuestCompareTests`: a guest adds from the product page, the header counts it, the compare page shows it under its category, removing it empties page, count and list; a guest adds from a card on the category page; a full category refuses a sixth product before any request; "Add to cart" from the compare page puts the product in the guest's cart; the add's toast has a "Compare" link to the page, open on the product's category; a "No longer available" column for a product the catalog doesn't have, and its remove; "Clear category" with its confirmation empties that category alone; "Clear all" with its confirmation, then "Restore products". `SignInMergeTests`: a guest's list merges into the buyer's on the first signed-in load, the guest list is deleted and the remembered id forgotten; a merge that fails on its way (aborted, or a gateway's 502 page) keeps the id, and the next load merges; a merge into an account list at the 500-product cap is refused with `COMPARE_LIST_FULL`, both lists stay as they were, the id is forgotten and the buyer is told the list is full. Each asserted on the page and on the rows. |
 | Group 2 | `GuestListsOff/` | `ProductComparison.AnonymousListEnabled` off: a guest's click gets "Sign in to add products to compare" with a Sign in link back to the page (AC 3); nothing is sent, no list exists. |
 | Group 3 | `CompareOff/` | `ProductComparison.Enabled` off: no toggle and no slot kept for it on the product page, no header link, the plugin never runs (no `CompareList` sent), and `/compare` is the storefront's 404. |
@@ -108,12 +108,11 @@ its catalog; each test gets its own browser context (fresh localStorage, fresh A
 merge test its own buyer, so what a test saves is nobody else's. Nothing is cleaned up: the database and the catalog
 live in memory and go with the group. Each test carries a 5-minute timeout.
 
-Measured on the workstation that produced this draft, against a clone: the contract test and the three groups (seven
-tests) run in about 70 seconds. A group's backend is up in under two seconds; the run's Vite in about five; the run's
-first page load costs ≈20 seconds (Vite compiles on demand, then the storefront loads the plugin), every later one
-about a second, the first page of each later group included. Against a build (the vc-frontend PR's), on the platform
-modules, the contract test and the four groups run in about 90 seconds; a group's backend, with its modules, seed and
-index, is up in a few seconds, and a layout test, which walks its 19 widths, takes about five.
+Measured on a developer workstation. Against a build (the vc-frontend PR's), the whole run takes about a minute and a
+half: a group's backend, with its modules, seed and index, is up in a few seconds, the run's first browser test takes
+longer and the others a second or two, and a layout test, which walks its 19 widths, about five. Against a clone it
+takes about three minutes: the run's first page load costs about twenty seconds while Vite compiles the storefront on
+demand, and every page after it loads slower than a build's.
 
 ## Running
 
@@ -254,7 +253,10 @@ resize a desktop one), and whether text that fits is also readable: two look-ali
   - the profile's address book answers an account without a contact with Forbidden, and X-Recommend's search history
     an account without a store; the storefront turns any Forbidden into its 403 page. A storefront-registered buyer has
     both, so the E2E buyers do too;
-  - a real currency needs its name set: `Currency`'s own constructor sets the English name, not the one saved.
+  - a real currency needs its name set: `Currency`'s own constructor sets the English name, not the one saved;
+  - the catalog deletes products, and a category's products with it, through raw SQL of its own: the product-deleted
+    handler's tests reached it once they deleted through the catalog instead of publishing an event of their own, so
+    the SQLite port carries those deletes too.
 - The platform's user manager caches an account under a lowercase key: once a buyer's account is cached, "BUYER-1"
   finds the buyer, and the guest rule refuses a guest asking with it. The component test for a guest who spells a
   buyer's id in another case now signs the buyer in again first, which drops the cached account, as any sign-in does.

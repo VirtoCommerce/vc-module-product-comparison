@@ -160,6 +160,26 @@ internal sealed class TestCatalog(IServiceProvider services)
         return withValue;
     }
 
+    /// <summary>Renames a product, as an administrator edits one: the catalog announces it modified.</summary>
+    public Task RenameProductAsync(string productId, string name)
+        => RunAsync<IItemService>(async items =>
+        {
+            var product = await items.GetByIdAsync(productId);
+            product.Name = name;
+            await items.SaveChangesAsync([product]);
+        });
+
+    /// <summary>Deletes products, as an administrator does: the catalog announces each of them deleted.</summary>
+    public Task DeleteProductsAsync(params string[] productIds)
+        => RunAsync<IItemService>(items => items.DeleteAsync(productIds));
+
+    /// <summary>
+    /// Deletes a category, as an administrator does: its products go with it, and the catalog announces each of them
+    /// deleted, as it does a product deleted on its own.
+    /// </summary>
+    public Task DeleteCategoryAsync(string categoryId)
+        => RunAsync<ICategoryService>(categories => categories.DeleteAsync([categoryId]));
+
     /// <summary>
     /// Builds the products' and the categories' index from what is saved, as a full rebuild from the admin does:
     /// what the storefront searches and loads products and categories from.
