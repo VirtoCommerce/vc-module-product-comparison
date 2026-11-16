@@ -41,13 +41,15 @@ internal static class CompareControls
     public static ILocator Share(IPage page) => PriceBlock(page).GetByRole(AriaRole.Button, new() { Name = "Share", Exact = true });
 
     /// <summary>The header's Compare link, whatever its count.</summary>
-    public static ILocator HeaderCompareLink(IPage page) => MainMenu(page).GetByRole(AriaRole.Link, new() { NameRegex = new Regex(@"^(\d+\s*)?Compare$") });
+    public static ILocator HeaderCompareLink(IPage page) => MainMenu(page).GetByRole(AriaRole.Link, new() { NameRegex = new Regex(@"^Compare(: \d+)?$") });
 
-    /// <summary>The header's Compare link showing <paramref name="count"/> on its badge; no badge for 0.</summary>
-    public static ILocator HeaderCompareLink(IPage page, int count) => MainMenu(page).GetByRole(AriaRole.Link, new()
-    {
-        NameRegex = count == 0 ? new Regex("^Compare$") : new Regex($@"^{count}\s*Compare$"),
-    });
+    /// <summary>
+    /// The header's Compare link with <paramref name="count"/> products, "Compare" for none. The storefront names a
+    /// header link with a count "{title}: {count}" in full: its badge, which shows 99+ past 99, is hidden from
+    /// assistive technology.
+    /// </summary>
+    public static ILocator HeaderCompareLink(IPage page, int count)
+        => MainMenu(page).GetByRole(AriaRole.Link, new() { Name = count == 0 ? "Compare" : $"Compare: {count}", Exact = true });
 
     /// <summary>The storefront's toasts.</summary>
     public static ILocator Toasts(IPage page) => page.GetByRole(AriaRole.Region, new() { Name = "Notifications" });
@@ -80,8 +82,9 @@ internal static class CompareControls
     /// <summary>A plain product column's "Add to cart".</summary>
     public static ILocator AddToCartButton(ILocator column) => column.GetByRole(AriaRole.Button, new() { Name = "Add to cart", Exact = true });
 
-    /// <summary>The header's Cart link showing <paramref name="count"/> on its badge.</summary>
-    public static ILocator HeaderCartLink(IPage page, int count) => MainMenu(page).GetByRole(AriaRole.Link, new() { NameRegex = new Regex($@"^{count}\s*Cart$") });
+    /// <summary>The header's Cart link with <paramref name="count"/> items, named as the Compare link is.</summary>
+    public static ILocator HeaderCartLink(IPage page, int count)
+        => MainMenu(page).GetByRole(AriaRole.Link, new() { Name = $"Cart: {count}", Exact = true });
 
     public static ILocator EmptyState(IPage page) => page.GetByRole(AriaRole.Heading, new() { Level = 3, Name = "Your compare list is empty", Exact = true });
 

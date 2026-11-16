@@ -229,7 +229,9 @@ resize a desktop one), and whether text that fits is also readable: two look-ali
   VCST-4857, on dev 2026-11-05): the shell's fields follow the storefront's dev, so a dev merge can need one more.
 - A `Notifications(page)` helper doesn't compile here: a transitive package brings a `VirtoCommerce.Notifications`
   namespace. The toast region is `Toasts(page)`.
-- The header's Compare link reads "1 Compare" with its badge and "Compare" without; the count is the link's name.
+- The header's Compare link is named "Compare: 1" with a count and "Compare" without, and the Cart link the same way.
+  The storefront's VCST-3632 hid the badge (it shows 99+ past 99) from assistive technology and put the full count
+  into the link's name; before it, the name was the badge's text and the title, "1 Compare".
 - On the platform modules, the contract test named what the paths reach, one at a time, as the profile types had:
   - the payment and shipping methods: the cart service filters a cart's payments and shipments by them on every load;
   - the file upload service: X-Cart hands it a cart's configuration files on every save, an empty list here;
