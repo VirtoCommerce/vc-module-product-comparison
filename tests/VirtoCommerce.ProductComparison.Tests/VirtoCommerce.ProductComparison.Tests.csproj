@@ -40,7 +40,7 @@
     <PackageReference Include="VirtoCommerce.Seo.Data" Version="3.1005.0" />
     <PackageReference Include="VirtoCommerce.ShippingModule.Data" Version="3.1009.0" />
     <PackageReference Include="VirtoCommerce.StoreModule.Data" Version="3.1009.0" />
-    <PackageReference Include="VirtoCommerce.Xapi.Data" Version="3.1027.0" />
+    <PackageReference Include="VirtoCommerce.Xapi.Data" Version="3.1028.0" />
     <PackageReference Include="VirtoCommerce.XCart.Data" Version="3.1042.0" />
     <PackageReference Include="VirtoCommerce.XCatalog.Data" Version="3.1023.0" />
     <PackageReference Include="VirtoCommerce.XCMS.Data" Version="3.1009.0" />

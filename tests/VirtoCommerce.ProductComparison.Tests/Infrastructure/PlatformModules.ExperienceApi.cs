@@ -37,7 +37,7 @@ namespace VirtoCommerce.ProductComparison.Tests.Infrastructure;
 internal static partial class PlatformModules
 {
     /// <summary>
-    /// X-API (vc-module-x-api 3.1027.0) as its module's Initialize registers it: the GraphQL server with its own
+    /// X-API (vc-module-x-api 3.1028.0) as its module's Initialize registers it: the GraphQL server with its own
     /// schema (the store, slug, country and dynamic property queries), authorization, validation and user context, and
     /// its core services (<c>AddXCore</c>). Schema introspection is on, as the shipped appsettings.json sets
     /// GraphQLPlayground:Enable; X-API's own GraphiQL page ships in its module folder, so the playground serves
