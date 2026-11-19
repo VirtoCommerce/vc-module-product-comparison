@@ -216,7 +216,7 @@ The plugin adds:
 * "Customize": the product page opened with `?compareItemId=<item id>` preselects that item's configuration, through
   the storefront's `registerProductConfigurationSource`, when the item is in the viewer's own list.
 
-It needs a storefront whose `@vc-frontend/core` facade is 0.2.8 or later 0.2.x: the version that added
+It needs a storefront whose `@vc-frontend/core` facade is 0.2.15 or later 0.2.x: the version that added
 `productActions`, the count on header links and `registerProductConfigurationSource`. An older storefront skips the
 plugin.
 

@@ -129,7 +129,7 @@ Prerequisites:
   clone next to this repo, then a build two levels up. In a ticket folder those are `sources\vc-frontend` and `front`,
   so nothing needs setting there, Visual Studio included. A clone that is there wins even when it cannot run, and fails
   with `yarn install`. The storefront must carry the host side of VCST-5918 (the `productActions` extension point, the
-  header link count, facade 0.2.8): before it is released, that is the ticket's vc-frontend branch.
+  header link count, facade 0.2.15): before it is released, that is the ticket's vc-frontend branch.
 - **Plugin build:** `corepack yarn build` in `src/VirtoCommerce.ProductComparison.Web/StorefrontApp`. A missing build,
   or one older than its sources under `src`, fails the groups with that command; they never rebuild it themselves.
   Other build inputs (`plugin.config.ts`, `vite.config.ts`, `package.json`, the facade) are not checked: rebuild after

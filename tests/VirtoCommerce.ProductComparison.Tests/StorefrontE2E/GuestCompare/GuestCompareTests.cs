@@ -192,8 +192,8 @@ public sealed class GuestCompareTests(GuestCompareEnvironment env)
 
     /// <summary>
     /// Deep test C5.7: "Add to cart" in the compare table puts a plain product in the cart through the host's
-    /// useShortCart, which the plugin's specs only mock, and across the facade the plugin is built against (0.2.8) and
-    /// the one the storefront runs (0.2.10). The add goes through X-Cart's own addItem: the toast names the product, the
+    /// useShortCart, which the plugin's specs only mock, and across the facade the plugin is built against and
+    /// the one the storefront runs. The add goes through X-Cart's own addItem: the toast names the product, the
     /// header's cart counts it, and the guest's cart holds one of it. The compare list doesn't change.
     /// </summary>
     [Fact(Timeout = 300_000)]

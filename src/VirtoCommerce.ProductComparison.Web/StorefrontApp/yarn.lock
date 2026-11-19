@@ -2603,9 +2603,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@vc-frontend/core@file:./facade/vc-frontend-core-0.2.8.tgz::locator=product-comparison%40workspace%3A.":
-  version: 0.2.8
-  resolution: "@vc-frontend/core@file:./facade/vc-frontend-core-0.2.8.tgz#./facade/vc-frontend-core-0.2.8.tgz::hash=511c11&locator=product-comparison%40workspace%3A."
+"@vc-frontend/core@file:./facade/vc-frontend-core-0.2.15.tgz::locator=product-comparison%40workspace%3A.":
+  version: 0.2.15
+  resolution: "@vc-frontend/core@file:./facade/vc-frontend-core-0.2.15.tgz#./facade/vc-frontend-core-0.2.15.tgz::hash=0a24b0&locator=product-comparison%40workspace%3A."
   peerDependencies:
     "@apollo/client": ^3.14.0
     "@floating-ui/vue": ^2.0.1
@@ -2614,7 +2614,7 @@ __metadata:
     "@tailwindcss/container-queries": ^0.1.1
     "@vue/apollo-composable": ^4.2.0
     "@vue/shared": ^3.5.40
-    "@vue/test-utils": ^2.4.11
+    "@vue/test-utils": ^2.5.1
     "@vueuse/core": ^14.3.0
     lodash-es: ^4.18.1
     maska: ^3.2.0
@@ -2633,7 +2633,7 @@ __metadata:
       optional: true
     tw-elements:
       optional: true
-  checksum: 10c0/1618cb361504869f8bb9eef67f3fd8f0ab82f03318e89d580c163ef1785651684d18226b5f4be1b43297d7dda1bf834037985424974e3e0b9fa95ff45a7aa175
+  checksum: 10c0/dde98ef584777b7e17a91a382762fb665aa2928cb6a776463275efec52d788a5a26e5dfa5df5af68f8909f4e44589deaef0c2659d0a23b52653ce97acaf5a003
   languageName: node
   linkType: hard
 
@@ -6127,7 +6127,7 @@ __metadata:
     "@module-federation/vite": "npm:1.23.3"
     "@tailwindcss/container-queries": "npm:^0.1.1"
     "@unhead/vue": "npm:^3.2.1"
-    "@vc-frontend/core": "file:./facade/vc-frontend-core-0.2.8.tgz"
+    "@vc-frontend/core": "file:./facade/vc-frontend-core-0.2.15.tgz"
     "@vitejs/plugin-vue": "npm:^6.0.8"
     "@vue/apollo-composable": "npm:^4.2.2"
     "@vue/eslint-config-typescript": "npm:^14.9.0"
