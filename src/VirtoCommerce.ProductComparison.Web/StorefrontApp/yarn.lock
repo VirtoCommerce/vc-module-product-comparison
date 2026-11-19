@@ -2603,9 +2603,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@vc-frontend/core@file:./facade/vc-frontend-core-0.2.15.tgz::locator=product-comparison%40workspace%3A.":
+"@vc-frontend/core@https://github.com/VirtoCommerce/vc-frontend/releases/download/core-v0.2.15/vc-frontend-core-0.2.15.tgz":
   version: 0.2.15
-  resolution: "@vc-frontend/core@file:./facade/vc-frontend-core-0.2.15.tgz#./facade/vc-frontend-core-0.2.15.tgz::hash=0a24b0&locator=product-comparison%40workspace%3A."
+  resolution: "@vc-frontend/core@https://github.com/VirtoCommerce/vc-frontend/releases/download/core-v0.2.15/vc-frontend-core-0.2.15.tgz"
   peerDependencies:
     "@apollo/client": ^3.14.0
     "@floating-ui/vue": ^2.0.1
@@ -6127,7 +6127,7 @@ __metadata:
     "@module-federation/vite": "npm:1.23.3"
     "@tailwindcss/container-queries": "npm:^0.1.1"
     "@unhead/vue": "npm:^3.2.1"
-    "@vc-frontend/core": "file:./facade/vc-frontend-core-0.2.15.tgz"
+    "@vc-frontend/core": "https://github.com/VirtoCommerce/vc-frontend/releases/download/core-v0.2.15/vc-frontend-core-0.2.15.tgz"
     "@vitejs/plugin-vue": "npm:^6.0.8"
     "@vue/apollo-composable": "npm:^4.2.2"
     "@vue/eslint-config-typescript": "npm:^14.9.0"
