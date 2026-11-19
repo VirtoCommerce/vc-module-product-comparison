@@ -1,0 +1,7 @@
+#import "../../fragments/compareList.graphql"
+
+mutation ClearCompareListCategory($command: InputClearCompareListCategoryType!) {
+  clearCompareListCategory(command: $command) {
+    ...compareList
+  }
+}

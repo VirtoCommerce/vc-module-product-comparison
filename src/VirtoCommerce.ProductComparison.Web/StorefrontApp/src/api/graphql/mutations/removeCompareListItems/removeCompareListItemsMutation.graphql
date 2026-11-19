@@ -1,0 +1,7 @@
+#import "../../fragments/compareList.graphql"
+
+mutation RemoveCompareListItems($command: InputRemoveCompareListItemsType!) {
+  removeCompareListItems(command: $command) {
+    ...compareList
+  }
+}

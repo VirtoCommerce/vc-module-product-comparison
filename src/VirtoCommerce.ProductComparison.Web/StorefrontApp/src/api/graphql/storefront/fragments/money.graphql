@@ -1,0 +1,5 @@
+fragment storefrontMoney on MoneyType {
+  amount
+  formattedAmount
+  formattedAmountWithoutCurrency
+}

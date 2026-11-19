@@ -1,0 +1,7 @@
+{
+  "id": "product-comparison",
+  "remote": {
+    "name": "product-comparison",
+    "exposed": "./plugin"
+  }
+}

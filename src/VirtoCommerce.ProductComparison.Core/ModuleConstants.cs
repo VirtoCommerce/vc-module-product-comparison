@@ -1,58 +1,100 @@
 using System.Collections.Generic;
+using System.Linq;
 using VirtoCommerce.Platform.Core.Settings;
 
 namespace VirtoCommerce.ProductComparison.Core;
 
 public static class ModuleConstants
 {
-    public static class Security
-    {
-        public static class Permissions
-        {
-            public const string Access = "product-comparison:access";
-            public const string Create = "product-comparison:create";
-            public const string Read = "product-comparison:read";
-            public const string Update = "product-comparison:update";
-            public const string Delete = "product-comparison:delete";
+    public const int MaxListItems = 500;
 
-            public static string[] AllPermissions { get; } =
-            [
-                Access,
-                Create,
-                Read,
-                Update,
-                Delete,
-            ];
-        }
-    }
+    public const int MaxConfigurationSections = 30;
+
+    public const int MaxListConfigurationSections = 1000;
+
+    public const int CustomTextLength = 255;
 
     public static class Settings
     {
         public static class General
         {
-            public static SettingDescriptor ProductComparisonEnabled { get; } = new()
+            public static SettingDescriptor Enabled { get; } = new()
             {
                 Name = "ProductComparison.Enabled",
                 GroupName = "Product Comparison|General",
                 ValueType = SettingValueType.Boolean,
-                DefaultValue = false,
+                DefaultValue = true,
+                IsPublic = true,
+            };
+
+            public static SettingDescriptor MaxItems { get; } = new()
+            {
+                Name = "ProductComparison.MaxItems",
+                GroupName = "Product Comparison|General",
+                ValueType = SettingValueType.PositiveInteger,
+                DefaultValue = 5,
+                IsPublic = true,
+            };
+
+            public static SettingDescriptor AnonymousListEnabled { get; } = new()
+            {
+                Name = "ProductComparison.AnonymousListEnabled",
+                GroupName = "Product Comparison|General",
+                ValueType = SettingValueType.Boolean,
+                DefaultValue = true,
+                IsPublic = true,
             };
 
             public static IEnumerable<SettingDescriptor> AllGeneralSettings
             {
                 get
                 {
-                    yield return ProductComparisonEnabled;
+                    yield return Enabled;
+                    yield return MaxItems;
+                    yield return AnonymousListEnabled;
                 }
             }
         }
 
-        public static IEnumerable<SettingDescriptor> AllSettings
+        public static class Cleanup
         {
-            get
+            public static SettingDescriptor Enabled { get; } = new()
             {
-                return General.AllGeneralSettings;
+                Name = "ProductComparison.CleanupAnonymousLists.Enabled",
+                GroupName = "Product Comparison|Cleanup",
+                ValueType = SettingValueType.Boolean,
+                DefaultValue = true,
+            };
+
+            public static SettingDescriptor Cron { get; } = new()
+            {
+                Name = "ProductComparison.CleanupAnonymousLists.Cron",
+                GroupName = "Product Comparison|Cleanup",
+                ValueType = SettingValueType.ShortText,
+                DefaultValue = "0 2 * * *",
+            };
+
+            public static SettingDescriptor AnonymousListLifetimeHours { get; } = new()
+            {
+                Name = "ProductComparison.AnonymousListLifetimeHours",
+                GroupName = "Product Comparison|Cleanup",
+                ValueType = SettingValueType.PositiveInteger,
+                DefaultValue = 48,
+            };
+
+            public static IEnumerable<SettingDescriptor> AllCleanupSettings
+            {
+                get
+                {
+                    yield return Enabled;
+                    yield return Cron;
+                    yield return AnonymousListLifetimeHours;
+                }
             }
         }
+
+        public static IEnumerable<SettingDescriptor> AllSettings => General.AllGeneralSettings.Concat(Cleanup.AllCleanupSettings);
+
+        public static IEnumerable<SettingDescriptor> StoreLevelSettings => General.AllGeneralSettings;
     }
 }

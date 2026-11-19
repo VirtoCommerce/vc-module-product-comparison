@@ -8,12 +8,6 @@
     <NoWarn>1591;NU1608</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Remove="dist\**" />
-    <Content Remove="dist\**" />
-    <EmbeddedResource Remove="dist\**" />
-    <None Remove="dist\**" />
-  </ItemGroup>
-  <ItemGroup>
     <Content Update="Localizations\**">
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </Content>
@@ -26,4 +20,5 @@
     <ProjectReference Include="..\VirtoCommerce.ProductComparison.Data.SqlServer\VirtoCommerce.ProductComparison.Data.SqlServer.csproj" />
     <ProjectReference Include="..\VirtoCommerce.ProductComparison.Xapi\VirtoCommerce.ProductComparison.Xapi.csproj" />
   </ItemGroup>
+  <Import Project="StorefrontApp\storefront-plugin.targets" />
 </Project>

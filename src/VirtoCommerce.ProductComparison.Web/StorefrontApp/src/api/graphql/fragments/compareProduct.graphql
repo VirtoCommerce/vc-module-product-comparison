@@ -1,0 +1,65 @@
+#import "./money.graphql"
+
+fragment compareProduct on Product {
+  id
+  name
+  code
+  slug
+  imgSrc
+  productType
+  isConfigurable
+  hasVariations
+  minQuantity
+  maxQuantity
+  packSize
+  vendor {
+    id
+    name
+  }
+  variations {
+    id
+  }
+  availabilityData {
+    isActive
+    isAvailable
+    isBuyable
+    isInStock
+    availableQuantity
+  }
+  price {
+    actual {
+      ...money
+    }
+    list {
+      ...money
+    }
+    discountAmount {
+      amount
+    }
+  }
+  minVariationPrice {
+    actual {
+      ...money
+    }
+    list {
+      ...money
+    }
+  }
+  properties {
+    name
+    label
+    value
+    hidden
+    propertyType
+    propertyValueType
+  }
+  rating {
+    value
+    reviewCount
+  }
+  breadcrumbs {
+    itemId
+    title
+    typeName
+  }
+}

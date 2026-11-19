@@ -1,0 +1,16 @@
+fragment compareList on CompareListType {
+  id
+  itemsCount
+  items {
+    id
+    productId
+    categoryId
+    configurationSections {
+      sectionId
+      type
+      productId
+      quantity
+      customText
+    }
+  }
+}

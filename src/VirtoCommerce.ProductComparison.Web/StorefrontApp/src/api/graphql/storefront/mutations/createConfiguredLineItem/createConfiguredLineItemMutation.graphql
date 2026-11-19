@@ -1,0 +1,12 @@
+#import "../../fragments/money.graphql"
+
+mutation CreateConfiguredLineItem($command: InputCreateConfiguredLineItemCommand!) {
+  createConfiguredLineItem(command: $command) {
+    listPrice {
+      ...storefrontMoney
+    }
+    salePrice {
+      ...storefrontMoney
+    }
+  }
+}

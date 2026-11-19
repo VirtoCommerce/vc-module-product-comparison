@@ -1,0 +1,7 @@
+#import "../../fragments/compareList.graphql"
+
+mutation MergeCompareList($command: InputMergeCompareListType!) {
+  mergeCompareList(command: $command) {
+    ...compareList
+  }
+}
