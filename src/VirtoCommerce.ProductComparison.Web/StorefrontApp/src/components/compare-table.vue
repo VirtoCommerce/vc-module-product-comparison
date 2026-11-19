@@ -302,8 +302,15 @@
               />
 
               <span v-else-if="row.kind === 'rating' && column.product.rating" class="compare-table__rating">
-                <VcRating mode="full" read-only :value="column.product.rating.value" size="xs" :with-text="false" />
-                {{ row.values[index] }}
+                <!-- Five stars don't fit a phone's column: one star with the value, as the product cards show it. -->
+                <VcRating
+                  :mode="isMobile ? 'mini' : 'full'"
+                  read-only
+                  :value="column.product.rating.value"
+                  size="xs"
+                  :with-text="false"
+                />
+                <span class="compare-table__rating-value">{{ row.values[index] }}</span>
               </span>
 
               <InStock
@@ -745,6 +752,13 @@ watch(
 
   &__rating {
     @apply flex items-center gap-2 text-sm font-bold;
+  }
+
+  &__rating-value {
+    @apply whitespace-nowrap;
+
+    // The cell breaks long values anywhere; a number stays whole.
+    overflow-wrap: normal;
   }
 
   &__boolean {

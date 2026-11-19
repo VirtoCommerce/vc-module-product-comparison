@@ -647,3 +647,43 @@ describe("CompareTable — compact threshold", () => {
     wrapper.unmount();
   });
 });
+
+describe("CompareTable — customer rating", () => {
+  function ratingRow(values: string[]): ICompareTableRow {
+    return { key: "field:rating", label: "Rating", kind: "rating", values, differs: false };
+  }
+
+  const ratedColumns = () => [
+    column("p1", { rating: { value: 3.3, reviewCount: 3 } }),
+    column("p2", { rating: { value: 4.5, reviewCount: 2 } }),
+  ];
+
+  it.each([
+    [false, "full"],
+    [true, "mini"],
+  ])("on mobile = %s, shows the %s rating and the value in a span of its own", async (mobile, mode) => {
+    await setMobile(mobile);
+    tableRows.value = [ratingRow(["3.3", "4.5"])];
+    const wrapper = mountTable({ columns: ratedColumns() });
+    await nextTick();
+
+    expect(wrapper.findAll("vc-rating-stub").map((rating) => rating.attributes("mode"))).toEqual([mode, mode]);
+    expect(wrapper.findAll(".compare-table__rating-value").map((value) => value.text())).toEqual(["3.3", "4.5"]);
+
+    wrapper.unmount();
+  });
+
+  it("switches the mode when the width crosses the mobile breakpoint", async () => {
+    tableRows.value = [ratingRow(["3.3", "4.5"])];
+    const wrapper = mountTable({ columns: ratedColumns() });
+    await nextTick();
+    expect(wrapper.findAll("vc-rating-stub").map((rating) => rating.attributes("mode"))).toEqual(["full", "full"]);
+
+    await setMobile(true);
+    await nextTick();
+
+    expect(wrapper.findAll("vc-rating-stub").map((rating) => rating.attributes("mode"))).toEqual(["mini", "mini"]);
+
+    wrapper.unmount();
+  });
+});
