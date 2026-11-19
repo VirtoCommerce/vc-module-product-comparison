@@ -608,11 +608,12 @@ watch(
     @apply absolute end-1 top-1;
   }
 
+  // Fills the rest of the cell, so the buttons line up whatever the length of the product names.
   &__product-footer {
-    @apply flex items-end gap-2;
+    @apply flex flex-1 items-end gap-2;
 
     @media (width < theme("screens.md")) {
-      @apply flex-col items-start;
+      @apply flex-col items-start justify-between;
     }
   }
 
